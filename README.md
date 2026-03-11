@@ -1,131 +1,89 @@
-# Geo SDK Demo — Outline
+# Geo Content Management
 
-## Prerequisites (before the demo)
+Tools for managing entities in the [Geo knowledge graph](https://geobrowser.io) via the [GRC-20 SDK](https://github.com/geobrowser/grc-20).
 
-- `.env` configured with `DEMO_SPACE_ID`, `PK_SW`
-- `bun` installed, dependencies available
-- A personal space on testnet to publish to
-- Geo Browser open in a tab: `https://geobrowser.io/space/<DEMO_SPACE_ID>`
-- See GRC-20 spec at: [https://github.com/geobrowser/grc-20/blob/main/spec.md](https://github.com/geobrowser/grc-20/blob/main/spec.md)
+## Prerequisites
 
----
+- `.env` configured with `PK_SW` (see `.env.example`)
+- `bun` installed, dependencies available (`bun install`)
+- A personal space on testnet (or membership/editorship in a DAO space)
 
-## Part 1: Overview — What We're Building
+## Entity Operations
 
-- Walk through the **knowledge graph model**: entities, types, properties (values and relations)
-- Show the JSON input files in `data_to_publish/` — this is the data we'll publish:
-  - `topics.json` — simple entities (name + description only)
-  - `people.json` — entities with typed values (web_url, birth_date) and topic relations
-  - `projects.json` — entities with text blocks, avatar images, and topic relations
-- Explain the goal: turn this flat JSON into a rich, interconnected knowledge graph on-chain
-
-## Part 2: Walk Through `02_publish_demo.ts`
-
-### 2a: Ontology IDs and the Property Registry
-
-- Show the `TYPES` and `PROPERTIES` constants — these are well-known IDs from the root space ontology
-- Highlight the **property registry** pattern (`VALUE_PROPERTIES` + `extractValues()`)
-  - Adding a new property to the demo = one line in the registry, no other code changes
-  - Date values are RFC 3339 strings (e.g. `"1994-01-31"`) — the SDK parses them internally
-
-### 2b: Creating Entities — `Graph.createEntity()`
-
-- **Topics** (Step 2) — simplest case: just `name`, `description`, and `types`
-  - Returns `{ id, ops }` — the ID is a 32-char hex UUID, ops are the low-level operations
-  - We collect all ops into `allOps` to publish in a single batch
-- **People** (Step 3) — adds **values** (web_url, birth_date) and **relations** (topics)
-  - Show how `extractValues()` builds the values array from JSON fields
-  - Show how topic relations are built: `Record<relationTypeId, Array<{ toEntity }>>`
-- **Projects** (Step 4) — same pattern, demonstrating reusability of the approach
-
-### 2c: Content Blocks — Text, Images, Data
-
-- **Text Blocks** (Step 5) — each block is its own entity attached via a Blocks relation
-  - Blocks relation uses `position` (fractional indexing via `Position.generateBetween()`) for ordering
-  - Content is markdown stored in the `markdown_content` property
-  - Content comes from the `blocks` array in `projects.json`
-- **Avatar Images** (Step 5b) — `Graph.createImage()` handles IPFS upload automatically
-  - Returns an Image entity with IPFS CID, width, height
-  - Attached to the parent via `ContentIds.AVATAR_PROPERTY` relation
-- **Data Blocks** (Step 6) — two flavors:
-  - **Query Data Block** — a live filter evaluated at render time (show the filter JSON structure)
-  - **Collection Data Block** — a hand-picked set of entities via `collection_item` relations
-  - Both support **Views** (Table, List, Gallery, Bullets) set on the relation via `entityRelations`
-
-### 2d: Publishing
-
-- All operations are batched into a single `allOps` array
-- Show the ops summary (operation count breakdown by type)
-- `publishOps()` handles everything:
-  - Queries the API to determine space type (personal vs DAO)
-  - For personal spaces: `personalSpace.publishEdit()`
-  - For DAO spaces: resolves caller's member space from members/editors list, then `daoSpace.proposeEdit()`
-  - Sends the transaction via the SDK's `getSmartAccountWalletClient` (gasless on testnet)
-
-### 2e: Run It
+All operations live in `01_entity_operations.ts`. Uncomment the operation you want, fill in the IDs, and run:
 
 ```bash
-bun run 02_publish_demo.ts
+bun run 01_entity_operations.ts
 ```
 
-- Watch the console output walk through each step
-- Open Geo Browser and verify the published entities appear in the space
+### 1. Delete Entity
 
----
+Delete an entity and all its properties/relations from a space. Optionally performs recursive orphan cleanup for entities that become unreferenced.
 
-## Part 3: Querying — Walk Through `01_api_demo.ts`
-
-- Uses the **Geo GraphQL API** (`https://testnet-api.geobrowser.io/graphql`)
-- Key API notes to mention:
-  - UUID scalar types (32-char hex, no dashes)
-  - `UUIDFilter` uses `is`/`isNot` (not `equalTo`)
-  - Top-level `spaceId` and `typeId` args are convenient shortcuts
-
-### Demo 1: Get Space Information
-- `space(id:)` query — returns type, address, page entity
-
-### Demo 2: List Entities in a Space
-- `entities(spaceId:)` with ordering (`UPDATED_AT_DESC`) and filtering (`name isNull: false`)
-
-### Demo 3: Filter by Type
-- `entities(typeId:)` — show all Type definitions in the root space
-
-### Demo 4: Entity Details — Values and Relations
-- Query `values` and `relations` for a specific entity
-- Show how property names resolve via `propertyEntity { name }`
-
-### Demo 5: Query Your Demo Space
-- Point at `DEMO_SPACE_ID` — shows the entities we just published
-
-### Demo 6: Backlinks
-- Reverse relation query: `relations(filter: { toEntityId: ... })` — who references an entity?
-
-### Run It
-
-```bash
-bun run 01_api_demo.ts
+```ts
+const ops = await deleteEntity({
+  entityId: 'ENTITY_ID',
+  spaceId: 'SPACE_ID',
+  // dryRun: true,           // preview without publishing
+  // skipOrphanCleanup: true, // skip recursive orphan deletion
+});
 ```
 
----
+### 2. Change Entity ID
 
-## Part 4: Cleanup — `03_delete_demo.ts`
+Move an entity to a new ID within the same space. Recreates all properties, relations, and backlinks under the new ID, then deletes the old one.
 
-- Reads the saved ops from `data_to_delete/demo_publish_ops.txt` (written by the publish step)
-- Generates inverse operations:
-  - `Graph.updateEntity({ unset })` for property values
-  - `Graph.deleteRelation()` for relations
-- Publishes the delete ops using the same `publishOps()` helper
-
-```bash
-bun run 03_delete_demo.ts
+```ts
+const ops = await changeEntityId({
+  oldEntityId: 'OLD_ENTITY_ID',
+  newEntityId: 'NEW_ENTITY_ID',
+  spaceId: 'SPACE_ID',
+  // dryRun: true,
+});
 ```
 
----
+### 3. Change Space
 
-## Key Takeaways
+Move an entity from one space to another, keeping the same entity ID. Recreates all data in the destination space and cleans up the source.
 
-1. **Everything is an entity** — types, properties, blocks, images, data blocks are all entities with relations
-2. **SDK builds ops, you publish them** — `Graph.*` methods return ops arrays; batch them and publish once
-3. **Ontology IDs are the glue** — type and property IDs from the root space define the schema
-4. **Content model is composable** — text blocks, data blocks, and images attach to any entity via the Blocks relation
-5. **Publishing is space-aware** — personal spaces publish directly; DAO spaces go through a proposal / governance flow
+```ts
+const { createOps, deleteOps } = await changeSpace({
+  entityId: 'ENTITY_ID',
+  fromSpaceId: 'FROM_SPACE_ID',
+  toSpaceId: 'TO_SPACE_ID',
+  // dryRun: true,
+});
+```
+
+### 4. Merge Entities
+
+Merge one or more secondary entities into a main entity. Handles both same-space and cross-space merges. If the main entity is a Property type, automatically migrates property references across all accessible spaces.
+
+```ts
+const ops = await mergeEntities({
+  mainEntityId: 'MAIN_ENTITY_ID',
+  mainSpaceId: 'MAIN_SPACE_ID',
+  secondaries: [
+    { entityId: 'SECONDARY_1', spaceId: 'SPACE_A' },
+    { entityId: 'SECONDARY_2', spaceId: 'SPACE_B' },
+  ],
+  // dryRun: true,
+  // appendRelations: true, // append extra relations from secondaries to main
+});
+```
+
+## Project Structure
+
+```
+01_entity_operations.ts     # Entry point — uncomment an operation and run
+src/
+  entity_ops.ts             # Core operation logic (delete, move, merge, migrate)
+  constants.ts              # Ontology IDs (types, properties, data types, views)
+  functions.ts              # Shared helpers (GraphQL client, publishing, ops serialization)
+knowledge-graph-ontology.md # Full ontology specification
+```
+
+## References
+
+- [GRC-20 Serialization Spec](https://github.com/geobrowser/grc-20/blob/main/spec.md)
+- [Knowledge Graph Ontology](knowledge-graph-ontology.md)

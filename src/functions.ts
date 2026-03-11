@@ -43,6 +43,9 @@ export async function gql(query: string, variables?: Record<string, any>) {
 // resolved by matching SW_ADDRESS against the DAO's members or editors list.
 
 export async function publishOps(ops: Op[], editName: string, input_space?: string) {
+  let proposalId;
+  let isEditor;
+  let authorSpaceId;
   let spaceId = process.env.DEMO_SPACE_ID; 
   if (input_space) {
     spaceId = input_space
@@ -121,6 +124,9 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
     const isMemberOrEditor = allCandidates.some(
       (m) => m.memberSpaceId === callerSpaceId,
     );
+    isEditor = editors.some(
+      (e) => e.memberSpaceId === callerSpaceId,
+    );
 
     if (!isMemberOrEditor) {
       throw new Error(
@@ -139,14 +145,32 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       daoSpaceId: `0x${spaceId}` as `0x${string}`,
       daoSpaceAddress: daoAddress as `0x${string}`,
     });
+    console.log("proposalId:", result.proposalId)
+    proposalId = result.proposalId
+    authorSpaceId = callerSpaceId
     console.log("CID:", result.cid);
     console.log("Edit ID:", result.editId);
     to = result.to;
     calldata = result.calldata;
+    
   }
 
+  
   const txHash = await client.sendTransaction({ to, data: calldata });
   console.log("Transaction hash:", txHash);
+
+  if (proposalId && isEditor && authorSpaceId) {
+    const result = daoSpace.voteProposal({
+      authorSpaceId: authorSpaceId,
+      spaceId: spaceId,
+      proposalId: proposalId,
+      vote: "YES"
+    })
+    to = result.to;
+    calldata = result.calldata;
+    const txHash = await client.sendTransaction({ to, data: calldata });
+    console.log("Vote transaction hash:", txHash);
+  }
   return txHash;
 }
 
@@ -211,3 +235,4 @@ export function printOps(ops: any, outputDir: string, fn: string) {
     console.log("NO OPS TO PRINT");
   }
 }
+
