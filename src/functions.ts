@@ -42,7 +42,7 @@ export async function gql(query: string, variables?: Record<string, any>) {
 // automatically from the API.  For DAO spaces the caller's member space is
 // resolved by matching SW_ADDRESS against the DAO's members or editors list.
 
-export async function publishOps(ops: Op[], editName: string, input_space?: string) {
+export async function publishOps(ops: Op[], editName: string, input_space?: string): Promise<string | undefined> {
   let proposalId;
   let isEditor;
   let authorSpaceId;
@@ -88,12 +88,30 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   let to: `0x${string}`;
   let calldata: `0x${string}`;
 
+  // Resolve the caller's personal space
+  const callerSpace = personalSpaceData.spaces?.find(
+    (s: any) => s.type === "PERSONAL",
+  );
+  if (!callerSpace) {
+    throw new Error(
+      `No personal space found for wallet ${author}. ` +
+        `Make sure this wallet has a personal space on the Geo testnet.`,
+    );
+  }
+  const callerSpaceId: string = callerSpace.id;
+
   if (spaceType === "PERSONAL") {
+    // Verify this is the caller's own personal space
+    if (spaceId !== callerSpaceId) {
+      console.warn(`⚠ Skipping publish to space ${spaceId} — it is a personal space that does not belong to you (your space: ${callerSpaceId}).`);
+      return undefined;
+    }
+
     const result = await personalSpace.publishEdit({
       name: editName,
       spaceId,
       ops,
-      author: spaceId, // this is the spaceId of the personal space
+      author: spaceId,
       network: "TESTNET",
     });
     console.log("CID:", result.cid);
@@ -101,18 +119,6 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
     to = result.to;
     calldata = result.calldata;
   } else {
-    // Resolve the caller's wallet address to their personal space ID
-    
-    const callerSpace = personalSpaceData.spaces?.find(
-      (s: any) => s.type === "PERSONAL",
-    );
-    if (!callerSpace) {
-      throw new Error(
-        `No personal space found for wallet ${author}. ` +
-          `Make sure this wallet has a personal space on the Geo testnet.`,
-      );
-    }
-    const callerSpaceId: string = callerSpace.id;
     console.log(`  Caller personal space: ${callerSpaceId}`);
 
     // Verify the caller's personal space is a member or editor of the DAO
@@ -129,11 +135,10 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
     );
 
     if (!isMemberOrEditor) {
-      throw new Error(
-        `Your personal space (${callerSpaceId}) is not a member or editor of DAO space ${spaceId}. ` +
-          `Members: ${members.map((m) => m.memberSpaceId).join(", ")}  ` +
-          `Editors: ${editors.map((e) => e.memberSpaceId).join(", ")}`,
+      console.warn(
+        `⚠ Skipping publish to DAO space ${spaceId} — you are not a member or editor (your space: ${callerSpaceId}).`,
       );
+      return undefined;
     }
 
     const result = await daoSpace.proposeEdit({
@@ -227,7 +232,7 @@ export function printOps(ops: any, outputDir: string, fn: string) {
 
   if (ops.length > 0) {
     const convertedOps = convertUuidBytes(ops);
-    const outputText = JSON.stringify(convertedOps, null, 2);
+    const outputText = JSON.stringify(convertedOps, (_, v) => typeof v === 'bigint' ? Number(v) : v, 2);
     const filePath = path.join(outputDir, fn);
     fs.writeFileSync(filePath, outputText);
     console.log(`OPS PRINTED to ${fn}`);

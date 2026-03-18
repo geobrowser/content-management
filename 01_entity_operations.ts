@@ -59,12 +59,12 @@ printOps(deleteOps, '.', 'change_space_delete_ops.txt');
 //  - value properties that exist on secondary entity, but not on main entity, should get added to main entity
 //  - relations that exist on secondary properties but not on main entity, should be added to main entity
 //  - When adding a relation, need to check whether that relation already exists on the main entity (same to entity). Should also check whether the to entity has a duplicate (e.g. to entity has same name and type as a to entity already existing on the main entity's property) 
-
+/*
 const ops = await mergeEntities({
-  mainEntityId: '09cb8a3406a4407ca6698a03d9e9b7c4',
-  mainSpaceId:  'f3dab79cb5a3d9d1759656dd5361d1c6',
+  mainEntityId: '412ff593e9154012a43d4c27ec5c68b6',
+  mainSpaceId:  'a19c345ab9866679b001d7d2138d88a1',
   secondaries: [
-    { entityId: '73c5bfaf39dd435d9af38fd63f2ddaee', spaceId: 'f3dab79cb5a3d9d1759656dd5361d1c6' },
+    { entityId: 'd69608290513c2a91102c939b3265bd7', spaceId: 'd69608290513c2a91102c939b3265bd7' },
   ],
   // dryRun: true,
   // addPropertiesToMain: false //Setting append relations to true appends extra relations from the secondary entity (in same space) to the main entity

@@ -1,23 +1,10 @@
 import { gql } from './src/functions.js';
-import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK } from './src/constants.js';
+import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK, SPACES } from './src/constants.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 // Finds duplicate Type and Property entities (by name, case-insensitive)
 // across the listed spaces. For Properties, shows data type and flags mismatches.
 // Run with: bun run 02_find_duplicates.ts
-
-// Spaces in ranked order (highest priority first)
-const SPACES = [
-  { name: 'Root',          id: 'a19c345ab9866679b001d7d2138d88a1' },
-  { name: 'Geo Education', id: '784bfddae3f3976118c561bf28195b44' },
-  { name: 'Crypto',        id: 'c9f267dcb0d270718c2a3c45a64afd32' },
-  { name: 'AI',            id: '41e851610e13a19441c4d980f2f2ce6b' },
-  { name: 'Health',        id: '52c7ae149838b6d47ce0f3b2a5974546' },
-  { name: 'Podcasts',      id: 'b5a31f8182b042437ede0f84ee02f104' },
-  { name: 'Software',      id: '9b611b848b12491b9b6b43f3cf019b8b' },
-  { name: 'Technology',    id: '870e3b3068661e6280fad2ab456829bc' },
-  { name: 'Industries',    id: 'd69608290513c2a91102c939b3265bd7' },
-];
 
 const spaceRank = new Map(SPACES.map((s, i) => [s.id, i]));
 const spaceName = new Map(SPACES.map(s => [s.id, s.name]));

@@ -4,3 +4,4 @@
 node_modules
 *.txt
 test_csvs/
+output

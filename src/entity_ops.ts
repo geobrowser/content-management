@@ -55,10 +55,10 @@ function toPropertyValueParam(v: any): PropertyValueParam | null {
     return { property: prop, type: 'time', value: v.time };
   }
   if (v.integer != null) {
-    return { property: prop, type: 'integer', value: v.integer };
+    return { property: prop, type: 'integer', value: Number(v.integer) };
   }
   if (v.float != null) {
-    return { property: prop, type: 'float', value: v.float };
+    return { property: prop, type: 'float', value: Number(v.float) };
   }
   if (v.boolean != null) {
     return { property: prop, type: 'boolean', value: v.boolean };
@@ -116,7 +116,7 @@ interface RelationRecord {
   position: string | null;
 }
 
-interface BacklinkRecord {
+export interface BacklinkRecord {
   id: string;
   entityId: string;
   typeId: string;
@@ -131,7 +131,7 @@ interface BacklinkRecord {
   position: string | null;
 }
 
-interface EntityData {
+export interface EntityData {
   values: ValueRecord[];
   relations: RelationRecord[];
 }
@@ -225,6 +225,89 @@ async function hasBacklinks(entityId: string): Promise<boolean> {
   return backlinks.length > 0;
 }
 
+// ─── Inline Entity Query Helpers ─────────────────────────────────────────
+// When querying entities with inline relations, backlinks, and values via the
+// entities query, the schema uses `nodes` wrappers and different field names
+// than the top-level relations/values queries.
+
+/** GraphQL fragment for inline entity fields (relations, backlinks, values). */
+export const ENTITY_INLINE_FIELDS = `
+  id
+  relations {
+    nodes {
+      id entityId typeId toEntityId
+      toEntity { name typeIds }
+      type { name }
+      toSpaceId fromSpaceId toVersionId fromVersionId position
+    }
+  }
+  backlinks {
+    nodes {
+      id entityId typeId fromEntityId toEntityId
+      fromEntity { name }
+      type { name }
+      spaceId toSpaceId fromSpaceId toVersionId fromVersionId position
+    }
+  }
+  values {
+    nodes {
+      property { id name }
+    }
+  }
+`;
+
+/** Map an inline relation node to a RelationRecord. */
+function mapRelationNode(n: any): RelationRecord {
+  return {
+    id: n.id,
+    entityId: n.entityId,
+    typeId: n.typeId,
+    toEntityId: n.toEntityId,
+    toEntity: n.toEntity,
+    typeEntity: n.type ?? null,
+    toSpaceId: n.toSpaceId ?? null,
+    fromSpaceId: n.fromSpaceId ?? null,
+    toVersionId: n.toVersionId ?? null,
+    fromVersionId: n.fromVersionId ?? null,
+    position: n.position ?? null,
+  };
+}
+
+/** Map an inline backlink node to a BacklinkRecord. */
+function mapBacklinkNode(n: any): BacklinkRecord {
+  return {
+    id: n.id,
+    entityId: n.entityId,
+    typeId: n.typeId,
+    fromEntityId: n.fromEntityId,
+    fromEntity: n.fromEntity ?? null,
+    typeEntity: n.type ?? null,
+    spaceId: n.spaceId,
+    toSpaceId: n.toSpaceId ?? null,
+    fromSpaceId: n.fromSpaceId ?? null,
+    toVersionId: n.toVersionId ?? null,
+    fromVersionId: n.fromVersionId ?? null,
+    position: n.position ?? null,
+  };
+}
+
+/** Map an inline value node to a ValueRecord. */
+function mapValueNode(n: any): ValueRecord {
+  return {
+    propertyId: n.property?.id,
+    propertyEntity: n.property ? { name: n.property.name } : null,
+  };
+}
+
+/** Extract relations, backlinks, and values from an inline entity response. */
+export function parseInlineEntity(e: any): { relations: RelationRecord[]; backlinks: BacklinkRecord[]; values: ValueRecord[] } {
+  return {
+    relations: (e.relations?.nodes ?? []).map(mapRelationNode),
+    backlinks: (e.backlinks?.nodes ?? []).map(mapBacklinkNode),
+    values: (e.values?.nodes ?? []).map(mapValueNode),
+  };
+}
+
 /** Extract optional relation fields (spaces, versions, position) for passing to Graph.createRelation. */
 function optionalRelationFields(r: Pick<RelationRecord | BacklinkRecord, 'toSpaceId' | 'fromSpaceId' | 'toVersionId' | 'fromVersionId' | 'position'>) {
   return {
@@ -251,6 +334,12 @@ export interface DeleteEntityOptions {
   excludeFromOrphanCheck?: string[];
   /** If provided, accumulate ops into this batch instead of publishing */
   opsBatch?: OpsBatch;
+  /** If provided, skip the queryEntityData call and use this data instead */
+  prefetchedEntityData?: EntityData;
+  /** If provided, look up entity data for orphan targets here before querying */
+  entityDataCache?: Map<string, EntityData>;
+  /** If provided, look up backlinks for orphan targets here before querying */
+  backlinksCache?: Map<string, BacklinkRecord[]>;
 }
 
 /**
@@ -262,10 +351,11 @@ export interface DeleteEntityOptions {
  * Returns the generated ops (and publishes them unless dryRun is set).
  */
 export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> {
-  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [], opsBatch } = options;
+  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [], opsBatch, prefetchedEntityData, entityDataCache, backlinksCache } = options;
 
-  console.log(`\n[deleteEntity] Querying entity ${entityId} in space ${spaceId}...`);
-  const { values, relations } = await queryEntityData(entityId, spaceId);
+  const cached = prefetchedEntityData ?? entityDataCache?.get(entityId);
+  console.log(`\n[deleteEntity] ${cached ? 'Using prefetched data for' : 'Querying'} entity ${entityId} in space ${spaceId}...`);
+  const { values, relations } = cached ?? await queryEntityData(entityId, spaceId);
 
   const uniquePropertyIds = [...new Set(values.map(v => v.propertyId))];
   console.log(`  Found ${values.length} values across ${uniquePropertyIds.length} properties`);
@@ -293,20 +383,34 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
   // Orphan cleanup: check if any "to" entities are now orphaned
   if (!skipOrphanCleanup && toEntityIds.length > 0) {
     const uniqueToIds = [...new Set(toEntityIds)].filter(id => !excludeFromOrphanCheck.includes(id));
-    for (const toId of uniqueToIds) {
-      // Check if the entity still has backlinks from other entities
-      const remainingBacklinks = await queryBacklinks(toId);
-      // Filter out the relation from the entity we're deleting
-      const externalBacklinks = remainingBacklinks.filter(bl => bl.fromEntityId !== entityId);
-      if (externalBacklinks.length === 0) {
-        console.log(`  Orphaned entity detected: ${toId} — recursively deleting`);
-        const orphanOps = await deleteEntity({
-          entityId: toId,
-          spaceId,
-          dryRun: true, // collect ops, we'll publish everything together
-          skipOrphanCleanup: false,
-          excludeFromOrphanCheck,
-        });
+
+    // Check all orphan candidates in parallel, using cache when available
+    const orphanChecks = await Promise.all(
+      uniqueToIds.map(async toId => {
+        const remainingBacklinks = backlinksCache?.get(toId) ?? await queryBacklinks(toId);
+        const externalBacklinks = remainingBacklinks.filter(bl => bl.fromEntityId !== entityId);
+        return { toId, isOrphan: externalBacklinks.length === 0 };
+      })
+    );
+
+    // Recursively delete orphans in parallel, passing caches through
+    const orphanIds = orphanChecks.filter(c => c.isOrphan).map(c => c.toId);
+    if (orphanIds.length > 0) {
+      console.log(`  ${orphanIds.length} orphaned entities detected — recursively deleting`);
+      const orphanResults = await Promise.all(
+        orphanIds.map(toId =>
+          deleteEntity({
+            entityId: toId,
+            spaceId,
+            dryRun: true,
+            skipOrphanCleanup: false,
+            excludeFromOrphanCheck,
+            entityDataCache,
+            backlinksCache,
+          })
+        )
+      );
+      for (const orphanOps of orphanResults) {
         ops.push(...orphanOps);
       }
     }
@@ -382,12 +486,14 @@ export async function changeEntityId(options: ChangeEntityIdOptions): Promise<Op
   }
 
   // Migrate backlinks: delete old ones pointing to oldEntityId, recreate pointing to newEntityId
+  // Route ops to each relation's own spaceId
   const backlinks = await queryBacklinks(oldEntityId);
   console.log(`  ${backlinks.length} backlinks to migrate`);
 
   for (const bl of backlinks) {
+    const blOps: Op[] = [];
     const delResult = Graph.deleteRelation({ id: bl.id });
-    ops.push(...delResult.ops);
+    blOps.push(...delResult.ops);
 
     const createResult = Graph.createRelation({
       fromEntity: bl.fromEntityId,
@@ -396,7 +502,17 @@ export async function changeEntityId(options: ChangeEntityIdOptions): Promise<Op
       entityId: bl.entityId,
       ...optionalRelationFields(bl),
     });
-    ops.push(...createResult.ops);
+    blOps.push(...createResult.ops);
+
+    if (bl.spaceId === spaceId) {
+      ops.push(...blOps);
+    } else {
+      // Cross-space backlink — publish/batch to the relation's own space
+      if (!dryRun) {
+        await publishOrBatch(blOps, `Migrate backlinks for ${oldEntityId} → ${newEntityId}`, bl.spaceId, opsBatch);
+      }
+      ops.push(...blOps);
+    }
   }
 
   // Delete the old entity — skip orphan cleanup since the new entity still references the same targets
@@ -475,11 +591,11 @@ export async function changeSpace(options: ChangeSpaceOptions): Promise<{ create
   console.log(`  ${backlinksToPatch.length} backlinks to update (in old space)`);
 
   // Backlinks in the old space need their toSpaceId updated — delete and recreate
-  // (these are relations FROM other entities TO this entity, stored in fromSpaceId)
-  // We can only update them if they're in a space we control
+  // These ops must be published to the relation's own space (fromSpaceId), not toSpaceId
+  const backlinkOps: Op[] = [];
   for (const bl of backlinksToPatch) {
     const delResult = Graph.deleteRelation({ id: bl.id });
-    createOps.push(...delResult.ops); // include in create batch for the old space
+    backlinkOps.push(...delResult.ops);
 
     const createResult = Graph.createRelation({
       fromEntity: bl.fromEntityId,
@@ -488,7 +604,7 @@ export async function changeSpace(options: ChangeSpaceOptions): Promise<{ create
       entityId: bl.entityId,
       ...optionalRelationFields(bl),
     });
-    createOps.push(...createResult.ops);
+    backlinkOps.push(...createResult.ops);
   }
 
   // Delete from old space
@@ -499,11 +615,12 @@ export async function changeSpace(options: ChangeSpaceOptions): Promise<{ create
     skipOrphanCleanup: true,
   });
 
-  console.log(`  Generated ${createOps.length} create ops (new space) + ${deleteOps.length} delete ops (old space).`);
+  console.log(`  Generated ${createOps.length} create ops (new space) + ${backlinkOps.length} backlink ops (old space) + ${deleteOps.length} delete ops (old space).`);
 
   if (!dryRun) {
-    // Publish creation in the new space first, then deletion in the old space
+    // Publish creation in the new space first, then backlink updates + deletion in the old space
     await publishOrBatch(createOps, `Move entity ${entityId} to space ${toSpaceId}`, toSpaceId, opsBatch);
+    await publishOrBatch(backlinkOps, `Update backlinks for entity ${entityId}`, fromSpaceId, opsBatch);
     await publishOrBatch(deleteOps, `Remove entity ${entityId} from space ${fromSpaceId}`, fromSpaceId, opsBatch);
   }
 
@@ -525,6 +642,10 @@ export interface MergeEntitiesOptions {
   addPropertiesToMain?: boolean;
   /** If provided, accumulate ops into this batch instead of publishing */
   opsBatch?: OpsBatch;
+  /** If provided, use this cache for entity data lookups before querying */
+  entityDataCache?: Map<string, EntityData>;
+  /** If provided, use this cache for backlink lookups before querying */
+  backlinksCache?: Map<string, BacklinkRecord[]>;
 }
 
 /**
@@ -543,7 +664,12 @@ export interface MergeEntitiesOptions {
  * - No cross-space property deduplication — each space keeps its own properties
  */
 export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]> {
-  const { mainEntityId: inputMainEntityId, mainSpaceId, secondaries, dryRun = false, addPropertiesToMain = true, opsBatch } = options;
+  const {
+    mainEntityId: inputMainEntityId, mainSpaceId, secondaries, dryRun = false,
+    addPropertiesToMain = true, opsBatch,
+    entityDataCache: inputEntityDataCache,
+    backlinksCache: inputBacklinksCache,
+  } = options;
 
   console.log(`\n[mergeEntities] Merging ${secondaries.length} entities into ${inputMainEntityId} (space ${mainSpaceId})`);
 
@@ -566,6 +692,8 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
   }
 
   const allOps: Op[] = [];
+  const entityDataCache = inputEntityDataCache ?? new Map<string, EntityData>();
+  const backlinksCache = inputBacklinksCache ?? new Map<string, BacklinkRecord[]>();
 
   // ── Same-space: auto-select main entity by backlinks, then properties+relations ──
   let mainEntityId = inputMainEntityId;
@@ -574,15 +702,34 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
     // All same-space candidates (including the original main)
     const candidates = [inputMainEntityId, ...initialSameSpace];
 
-    // Query entity data and backlinks for each candidate in parallel
-    const candidateInfo = await Promise.all(candidates.map(async (id) => {
-      const [entityData, backlinks] = await Promise.all([
-        queryEntityData(id, mainSpaceId),
-        queryBacklinks(id),
-      ]);
-      const propCount = entityData.values.length + entityData.relations.length;
-      return { id, entityData, backlinkCount: backlinks.length, propCount };
-    }));
+    interface CandidateInfo { id: string; entityData: EntityData; backlinks: BacklinkRecord[]; backlinkCount: number; propCount: number }
+    let candidateInfo: CandidateInfo[];
+
+    // Use caches if all candidates are already prefetched, otherwise query
+    const allCached = candidates.every(id => entityDataCache.has(id) && backlinksCache.has(id));
+    if (allCached) {
+      console.log(`  All ${candidates.length} candidates found in cache — skipping query`);
+      candidateInfo = candidates.map(id => {
+        const entityData = entityDataCache.get(id)!;
+        const backlinks = backlinksCache.get(id)!;
+        const propCount = entityData.values.length + entityData.relations.length;
+        return { id, entityData, backlinks, backlinkCount: backlinks.length, propCount };
+      });
+    } else {
+      const candidateFilterIds = candidates.map(id => `"${id}"`).join(', ');
+      const candidateData = await gql(`{
+        entities(filter: { id: { in: [${candidateFilterIds}] } }) {
+          ${ENTITY_INLINE_FIELDS}
+        }
+      }`);
+
+      candidateInfo = (candidateData.entities ?? []).map((e: any) => {
+        const { relations, backlinks, values } = parseInlineEntity(e);
+        const entityData: EntityData = { values, relations };
+        const propCount = values.length + relations.length;
+        return { id: e.id as string, entityData, backlinks, backlinkCount: backlinks.length, propCount };
+      });
+    }
 
     // Sort: most backlinks first, then most properties+relations
     candidateInfo.sort((a, b) => {
@@ -598,6 +745,61 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
     // Rebuild sameSpaceSecondaries to exclude the chosen main
     const sameSpaceSecondaryIds = candidates.filter(id => id !== mainEntityId);
     bySpace.set(mainSpaceId, sameSpaceSecondaryIds);
+
+    // Cache entity data and backlinks from candidate queries
+    for (const ci of candidateInfo) {
+      entityDataCache.set(ci.id, ci.entityData);
+      backlinksCache.set(ci.id, ci.backlinks);
+    }
+
+    // Bulk-prefetch entity data and backlinks for all relation targets (orphan candidates)
+    // using a single entities query with inline relations + backlinks
+    const allRelationTargetIds = new Set<string>();
+    for (const ci of candidateInfo) {
+      for (const r of ci.entityData.relations) {
+        allRelationTargetIds.add(r.toEntityId);
+      }
+    }
+    // Remove entities already in the cache
+    for (const ci of candidateInfo) allRelationTargetIds.delete(ci.id);
+    for (const id of allRelationTargetIds) {
+      if (entityDataCache.has(id) && backlinksCache.has(id)) allRelationTargetIds.delete(id);
+    }
+
+    if (allRelationTargetIds.size > 0) {
+      const targetIds = [...allRelationTargetIds];
+      console.log(`  Bulk-prefetching data for ${targetIds.length} relation targets...`);
+
+      const BULK = 500;
+      for (let i = 0; i < targetIds.length; i += BULK) {
+        const batch = targetIds.slice(i, i + BULK);
+        const filterIds = batch.map(id => `"${id}"`).join(', ');
+        const data = await gql(`{
+          entities(filter: { id: { in: [${filterIds}] } }) {
+            ${ENTITY_INLINE_FIELDS}
+          }
+        }`);
+
+        // Cache entity data and backlinks from the entities response
+        for (const e of data.entities ?? []) {
+          const { relations, backlinks, values } = parseInlineEntity(e);
+          if (!entityDataCache.has(e.id)) {
+            entityDataCache.set(e.id, { values, relations });
+          }
+          if (!backlinksCache.has(e.id)) {
+            backlinksCache.set(e.id, backlinks);
+          }
+        }
+
+        // Ensure all batch IDs have entries (even if entity wasn't found)
+        for (const id of batch) {
+          if (!entityDataCache.has(id)) entityDataCache.set(id, { values: [], relations: [] });
+          if (!backlinksCache.has(id)) backlinksCache.set(id, []);
+        }
+      }
+
+      console.log(`  Prefetched ${entityDataCache.size} entity data + ${backlinksCache.size} backlink entries`);
+    }
   }
 
   const allSecondaryIds = [...(bySpace.get(mainSpaceId) ?? []), ...secondaries.filter(s => s.spaceId !== mainSpaceId).map(s => s.entityId)];
@@ -607,7 +809,7 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
   if (sameSpaceSecondaries && sameSpaceSecondaries.length > 0) {
     console.log(`\n  Same-space merge: ${sameSpaceSecondaries.length} entities in space ${mainSpaceId}`);
 
-    const mainData = await queryEntityData(mainEntityId, mainSpaceId);
+    const mainData = entityDataCache.get(mainEntityId) ?? (await queryEntityData(mainEntityId, mainSpaceId));
     const mainPropertyIds = new Set(mainData.values.map(v => v.propertyId));
     const mainRelationKeys = new Set(
       mainData.relations.map(r => `${r.typeId}:${r.toEntityId}`)
@@ -615,7 +817,7 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
 
     for (const secondaryId of sameSpaceSecondaries) {
       console.log(`\n    Processing secondary: ${secondaryId}`);
-      const secondaryData = await queryEntityData(secondaryId, mainSpaceId);
+      const secondaryData = entityDataCache.get(secondaryId) ?? (await queryEntityData(secondaryId, mainSpaceId));
 
       const movedRelationTargets: string[] = [];
       if (addPropertiesToMain) {
@@ -699,12 +901,14 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
       }
 
       // Migrate backlinks pointing TO the secondary → point to main instead
-      const backlinks = await queryBacklinks(secondaryId);
+      // Route ops to the relation's own spaceId, not mainSpaceId
+      const backlinks = backlinksCache.get(secondaryId) ?? await queryBacklinks(secondaryId);
       for (const bl of backlinks) {
         if (allSecondaryIds.includes(bl.fromEntityId)) continue;
 
+        const blOps: Op[] = [];
         const delResult = Graph.deleteRelation({ id: bl.id });
-        allOps.push(...delResult.ops);
+        blOps.push(...delResult.ops);
 
         const key = `${bl.typeId}:${mainEntityId}`;
         if (!mainRelationKeys.has(key)) {
@@ -715,7 +919,17 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
             entityId: bl.entityId,
             ...optionalRelationFields(bl),
           });
-          allOps.push(...createResult.ops);
+          blOps.push(...createResult.ops);
+        }
+
+        if (bl.spaceId === mainSpaceId) {
+          allOps.push(...blOps);
+        } else {
+          // Cross-space backlink — publish/batch to the relation's own space
+          if (!dryRun) {
+            await publishOrBatch(blOps, `Migrate backlinks to ${mainEntityId}`, bl.spaceId, opsBatch);
+          }
+          allOps.push(...blOps);
         }
       }
 
@@ -727,6 +941,9 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
         dryRun: true,
         skipOrphanCleanup: false,
         excludeFromOrphanCheck: [mainEntityId, ...movedRelationTargets],
+        prefetchedEntityData: secondaryData,
+        entityDataCache,
+        backlinksCache,
       });
       allOps.push(...deleteOps);
     }
@@ -819,7 +1036,10 @@ function extractValue(v: any, sdkType: string): any {
   };
   const field = fieldMap[sdkType];
   if (!field) throw new Error(`Unknown SDK type "${sdkType}" — cannot extract value`);
-  return v[field];
+  const raw = v[field];
+  if (sdkType === 'integer') return Number(raw);
+  if (sdkType === 'float') return Number(raw);
+  return raw;
 }
 
 /** Build a PropertyValueParam for a given SDK type and converted value. */

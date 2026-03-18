@@ -1,16 +1,12 @@
-//Note: we are having issues where some stuff is getting published to the wrong spaces...
-//Need to query all spaces and find all types that have properties relations pointing to blank entities
-//Need to output those
-
 import { gql, publishOps } from './src/functions.js';
 import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK, SPACES } from './src/constants.js';
 import { mergeEntities, type OpsBatch, type EntityData, type BacklinkRecord, ENTITY_INLINE_FIELDS, parseInlineEntity } from './src/entity_ops.js';
 import * as fs from 'fs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
-// Finds duplicate Type and Property entities and merges them automatically.
+// Finds duplicate Property entities and merges them automatically.
 // Property duplicates with data type mismatches are SKIPPED (logged as warnings).
-// Run with: bun run 03_merge_duplicates.ts
+// Run with: bun run 04_merge_duplicates_properties.ts
 
 const DRY_RUN = false; // Set to false to actually publish merges
 
@@ -84,7 +80,6 @@ async function countBacklinks(entityId: string): Promise<{ total: number; extern
   let external = 0;
   for (const rel of rels) {
     const spaceIds: string[] = rel.fromEntity?.spaceIds ?? [];
-    // If the entity only exists in spaces we don't control, it's external
     const allExternal = spaceIds.length > 0 && spaceIds.every((s: string) => !knownSpaceIds.has(s));
     if (allExternal) external++;
   }
@@ -103,25 +98,6 @@ async function countExternalPropertyUsages(propertyId: string): Promise<{ total:
     }
   }`);
 
-  const spaceHits = new Set<string>();
-  const externalSpaceHits = new Set<string>();
-
-  // Count value usages by space
-  for (const v of data.values ?? []) {
-    if (v.spaceId) {
-      spaceHits.add(v.spaceId);
-      if (!knownSpaceIds.has(v.spaceId)) externalSpaceHits.add(v.spaceId);
-    }
-  }
-
-  // Count relation usages by the fromEntity's spaces
-  for (const rel of data.relations ?? []) {
-    for (const sid of rel.fromEntity?.spaceIds ?? []) {
-      spaceHits.add(sid);
-      if (!knownSpaceIds.has(sid)) externalSpaceHits.add(sid);
-    }
-  }
-
   const totalUsages = (data.values ?? []).length + (data.relations ?? []).length;
   let externalUsages = 0;
   for (const v of data.values ?? []) {
@@ -138,6 +114,7 @@ async function countExternalPropertyUsages(propertyId: string): Promise<{ total:
 async function findDuplicates(label: string, typeId: string): Promise<DuplicateGroup[]> {
   console.log(`\nSearching for duplicate ${label} entities across ${SPACES.length} spaces...\n`);
 
+  // Parallel space fetches
   const allHits: EntityHit[] = [];
   const spaceResults = await Promise.all(
     SPACES.map(async space => {
@@ -184,11 +161,9 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
 
   console.log(`  ${duplicateEntries.length} duplicate groups, ${uniqueDuplicateIds.length} unique entities to analyze`);
 
-  // ── Bulk fetch: backlinks and property data types in as few queries as possible ──
+  // ── Bulk fetch: backlinks/usages and data types in as few queries as possible ──
 
-  // Bulk fetch all backlinks pointing to any duplicate entity (paginated)
   const backlinkCounts = new Map<string, { total: number; external: number }>();
-  // Initialize all to zero
   for (const id of uniqueDuplicateIds) backlinkCounts.set(id, { total: 0, external: 0 });
 
   const BULK_PAGE = 500;
@@ -230,7 +205,7 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
         offset += BULK_PAGE;
       }
     } else {
-      // For non-property types: count backlinks (relations pointing TO each entity)
+      // For non-property types: count backlinks
       let offset = 0;
       while (true) {
         const data = await gql(`{
@@ -336,8 +311,8 @@ async function main() {
 
   const categories = [
     //{ label: 'Type', typeId: TYPES.type },
-    //{ label: 'Property', typeId: TYPES.property },
-    { label: 'Role', typeId: TYPES.role },
+    { label: 'Property', typeId: TYPES.property },
+    //{ label: 'Role', typeId: TYPES.role },
     //{ label: 'Skill', typeId: TYPES.skill },
     //{ label: 'Topic', typeId: TYPES.topic },
     //{ label: 'Claim', typeId: TYPES.claim },
@@ -530,8 +505,8 @@ async function main() {
   }
   if (totalOpsCount > 0) {
     opsLines.unshift(`Total ops: ${totalOpsCount} across ${opsBatch.size} space(s)\n`);
-    fs.writeFileSync('merge_duplicates_ops.txt', opsLines.join('\n'));
-    console.log(`\nOps written to merge_duplicates_ops.txt (${totalOpsCount} ops across ${opsBatch.size} space(s))`);
+    fs.writeFileSync('merge_properties_ops.txt', opsLines.join('\n'));
+    console.log(`\nOps written to merge_properties_ops.txt (${totalOpsCount} ops across ${opsBatch.size} space(s))`);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -594,8 +569,8 @@ async function main() {
   lines.push(`  Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
 
   const reportText = lines.join('\n');
-  fs.writeFileSync('merge_duplicates_report.txt', reportText);
-  console.log(`\nReport written to merge_duplicates_report.txt`);
+  fs.writeFileSync('merge_properties_report.txt', reportText);
+  console.log(`\nReport written to merge_properties_report.txt`);
 
   console.log(`\n${'='.repeat(80)}`);
   console.log(`Summary: ${mergedCount} merged, ${skippedCount} skipped${DRY_RUN ? ' (dry run)' : ''}`);
