@@ -2,6 +2,9 @@
 //Need to query all spaces and find all types that have properties relations pointing to blank entities
 //Need to output those
 
+//If I am deleting a relation, I also need to delete the relation entity
+//Orphaned entity should have no relation pointing to it as an entity or to entity
+
 import { gql, publishOps } from './src/functions.js';
 import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK, SPACES } from './src/constants.js';
 import { mergeEntities, type OpsBatch, type EntityData, type BacklinkRecord, ENTITY_INLINE_FIELDS, parseInlineEntity } from './src/entity_ops.js';
@@ -337,11 +340,13 @@ async function main() {
   const categories = [
     //{ label: 'Type', typeId: TYPES.type },
     //{ label: 'Property', typeId: TYPES.property },
-    { label: 'Role', typeId: TYPES.role },
+    //{ label: 'Role', typeId: TYPES.role },
     //{ label: 'Skill', typeId: TYPES.skill },
     //{ label: 'Topic', typeId: TYPES.topic },
     //{ label: 'Claim', typeId: TYPES.claim },
     //{ label: 'Person', typeId: TYPES.person },
+    //{ label: 'Podcast', typeId: TYPES.podcast },
+    { label: 'Episode', typeId: TYPES.episode },
   ];
 
   let mergedCount = 0;

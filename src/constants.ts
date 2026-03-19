@@ -34,6 +34,9 @@ export const TYPES = {
   skill:      "9ca6ab1f3a114e49bbaf72e0c9a985cf", 
   topic:      "5ef5a5860f274d8e8f6c59ae5b3e89e2", 
   claim:      "96f859efa1ca4b229372c86ad58b694b", 
+  person:     "7ed45f2bc48b419e8e4664d5ff680b0d", 
+  podcast:    "4c81561d1f9541319cdddd20ab831ba2", 
+  episode:    "972d201ad78045689e01543f67b26bee", 
 };
 
 // ─── Property IDs ────────────────────────────────────────────────────────────

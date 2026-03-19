@@ -19,7 +19,7 @@ import * as fs from 'fs';
 //
 // Run with: bun run 07_fix_stale_relations.ts
 
-const DRY_RUN = true;
+const DRY_RUN = false;
 
 const spaceName = new Map(SPACES.map(s => [s.id, s.name]));
 
@@ -333,6 +333,26 @@ async function main() {
           stale,
           correctTargetId: '4c81561d1f9541319cdddd20ab831ba2',
           correctTargetName: 'Podcast',
+          wrongSpaceRelId: null,
+          wrongSpaceId: null,
+          correctAlreadyExists: false,
+        });
+      } else if (stale.typeId === PROPERTIES.types && stale.toEntityId === '937e2a85ced04f159c33ff9b9a96c5d0') {
+        // Deleted Source duplicate → remap to the correct Source type
+        fixCases.push({
+          stale,
+          correctTargetId: '706779bf537744a68694ea06cf87a3a2',
+          correctTargetName: 'Source',
+          wrongSpaceRelId: null,
+          wrongSpaceId: null,
+          correctAlreadyExists: false,
+        });
+      } else if (stale.typeId === PROPERTIES.types && stale.toEntityId === '8e23e802a20b494c8cda5d4a22d51206') {
+        // Deleted Claim relation duplicate → remap to the correct Claim relation type
+        fixCases.push({
+          stale,
+          correctTargetId: '31ce915d47bc4f28bd7842a10cb5d14c',
+          correctTargetName: 'Claim relation',
           wrongSpaceRelId: null,
           wrongSpaceId: null,
           correctAlreadyExists: false,
