@@ -5,5 +5,9 @@ CLAUDE.md
 docs/
 node_modules
 *.txt
+*.csv
 test_csvs/
 !output/merge_properties_report.txt
+output
+snapshots/
+logs/
