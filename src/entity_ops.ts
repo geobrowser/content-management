@@ -1,6 +1,8 @@
 import { Graph, type Op, type PropertyValueParam } from '@geoprotocol/geo-sdk';
 import { gql, publishOps } from './functions.ts';
 import { TYPES, PROPERTIES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK } from './constants.ts';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ─── Ops Batching ──────────────────────────────────────────────────────────
 
@@ -740,8 +742,13 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
       });
     }
 
-    // Sort: most backlinks first, then most properties+relations
+    // Sort: most blocks first → if tied, most backlinks → if tied, most properties+relations
+    // This ensures the entity with the richest content (blocks) is preferred as the survivor.
+    // Backlinks are the fallback when block counts are equal.
     candidateInfo.sort((a, b) => {
+      const aBlocks = a.entityData.relations.filter(r => r.typeId === PROPERTIES.blocks).length;
+      const bBlocks = b.entityData.relations.filter(r => r.typeId === PROPERTIES.blocks).length;
+      if (bBlocks !== aBlocks) return bBlocks - aBlocks;
       if (b.backlinkCount !== a.backlinkCount) return b.backlinkCount - a.backlinkCount;
       return b.propCount - a.propCount;
     });
@@ -813,6 +820,24 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
 
   const allSecondaryIds = [...(bySpace.get(mainSpaceId) ?? []), ...secondaries.filter(s => s.spaceId !== mainSpaceId).map(s => s.entityId)];
 
+  // ── Save pre-merge snapshot for recovery ────
+  if (!dryRun) {
+    const snapshotDir = path.resolve('snapshots');
+    if (!fs.existsSync(snapshotDir)) fs.mkdirSync(snapshotDir, { recursive: true });
+    const snapshotData: Record<string, { entityData: EntityData; backlinks: BacklinkRecord[] }> = {};
+    const allInvolvedIds = [mainEntityId, ...allSecondaryIds];
+    for (const id of allInvolvedIds) {
+      snapshotData[id] = {
+        entityData: entityDataCache.get(id) ?? { values: [], relations: [] },
+        backlinks: backlinksCache.get(id) ?? [],
+      };
+    }
+    const timestamp = new Date().toISOString().replace(/:/g, '-');
+    const snapshotPath = path.join(snapshotDir, `merge-snapshot-${timestamp}.json`);
+    fs.writeFileSync(snapshotPath, JSON.stringify(snapshotData, null, 2));
+    console.log(`  Pre-merge snapshot saved: ${snapshotPath}`);
+  }
+
   // ── Same-space secondaries: merge properties, relations, backlinks ────
   const sameSpaceSecondaries = bySpace.get(mainSpaceId);
   if (sameSpaceSecondaries && sameSpaceSecondaries.length > 0) {
@@ -877,6 +902,17 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
           // Check exact entity match
           if (mainRelationKeys.has(key)) {
             console.log(`      Skipping duplicate relation (same entity): ${r.typeEntity?.name ?? r.typeId} → ${r.toEntity?.name ?? r.toEntityId}`);
+            continue;
+          }
+
+          // Singleton relations — Avatar and Cover should only exist once per entity.
+          // If main already has one, skip adding another regardless of target entity.
+          const SINGLETON_RELATION_IDS = new Set([
+            '1155befffad549b7a2e0da4777b8792c', // Avatar
+            '34f535072e6b42c5a84443981a77cfa2', // Cover
+          ]);
+          if (SINGLETON_RELATION_IDS.has(r.typeId) && (mainRelTargetsByProp.get(r.typeId) ?? []).length > 0) {
+            console.log(`      Skipping singleton relation (main already has one): ${r.typeEntity?.name ?? r.typeId} → ${r.toEntity?.name ?? r.toEntityId}`);
             continue;
           }
 
@@ -952,6 +988,23 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
           if (!dryRun) {
             await publishOrBatch(blOps, `Migrate backlinks to ${mainEntityId}`, bl.spaceId, opsBatch);
           }
+        }
+      }
+
+      // Transfer missing types from secondary to main
+      // Secondary's Types relations have typeId === PROPERTIES.types
+      const secondaryTypeRelations = secondaryData.relations.filter(r => r.typeId === PROPERTIES.types);
+      const mainTypeIds = new Set(typeIds); // from line 680 — main entity's typeIds
+      for (const typeRel of secondaryTypeRelations) {
+        if (!mainTypeIds.has(typeRel.toEntityId)) {
+          console.log(`      Adding type: ${typeRel.toEntity?.name ?? typeRel.toEntityId}`);
+          const result = Graph.createRelation({
+            fromEntity: mainEntityId,
+            toEntity: typeRel.toEntityId,
+            type: PROPERTIES.types,
+          });
+          allOps.push(...result.ops);
+          mainTypeIds.add(typeRel.toEntityId);
         }
       }
 

@@ -18,34 +18,60 @@ const TESTNET_RPC_URL = "https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz";
 
 const API_URL = "https://testnet-api.geobrowser.io/graphql";
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
+export async function gql(query: string, variables?: Record<string, any>, maxRetries = 5) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, variables }),
+      });
 
-export async function gql(query: string, variables?: Record<string, any>) {
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, variables }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      if (res.status >= 500 && attempt < MAX_RETRIES) {
-        console.warn(`  Retrying (${attempt + 1}/${MAX_RETRIES}) after ${res.status}...`);
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+      // Retry on 5xx / 429
+      if ((res.status >= 500 || res.status === 429) && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.log(`  ⚠ API ${res.status}, retry ${attempt}/${maxRetries} in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
         continue;
       }
-      throw new Error(`API error: ${res.status} ${res.statusText}\n${body}`);
-    }
 
-    const json = await res.json();
-    if (json.errors) {
-      console.error("GraphQL errors:", JSON.stringify(json.errors, null, 2));
-      throw new Error(`GraphQL: ${json.errors[0].message}`);
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status} ${res.statusText}`);
+      }
+
+      const json = await res.json();
+
+      // Retry on GraphQL "Unexpected error"
+      if (json.errors) {
+        const msg = json.errors[0]?.message ?? 'Unknown';
+        const isServerError = msg.includes('Unexpected error') || msg.includes('Internal');
+        if (isServerError && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          console.log(`  ⚠ GraphQL: "${msg}", retry ${attempt}/${maxRetries} in ${delay}ms`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        console.error("GraphQL errors:", JSON.stringify(json.errors, null, 2));
+        throw new Error(`GraphQL: ${msg}`);
+      }
+
+      return json.data;
+    } catch (error: any) {
+      const isRetryable = error.message?.includes('fetch failed') ||
+        error.message?.includes('ECONNRESET') ||
+        error.message?.includes('ETIMEDOUT') ||
+        error.message?.includes('socket hang up');
+
+      if (isRetryable && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.log(`  ⚠ ${error.message}, retry ${attempt}/${maxRetries} in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw error;
     }
-    return json.data;
   }
+  throw new Error('gql: exhausted all retries');
 }
 
 // ─── Membership Check ────────────────────────────────────────────────────────
@@ -242,6 +268,7 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       callerSpaceId: `0x${callerSpaceId}` as `0x${string}`,
       daoSpaceId: `0x${spaceId}` as `0x${string}`,
       daoSpaceAddress: daoAddress as `0x${string}`,
+      votingMode: isEditor ? "FAST" : "SLOW",
     });
     console.log("proposalId:", result.proposalId)
     proposalId = result.proposalId
@@ -254,21 +281,22 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   }
 
   
-  const txHash = await client.sendTransaction({ to, data: calldata });
+  const txHash = await client.sendTransaction({ account: client.account, to, data: calldata });
   console.log("Transaction hash:", txHash);
 
-  if (proposalId && isEditor && authorSpaceId) {
-    const result = daoSpace.voteProposal({
-      authorSpaceId: authorSpaceId,
-      spaceId: spaceId,
-      proposalId: proposalId,
-      vote: "YES"
-    })
-    to = result.to;
-    calldata = result.calldata;
-    const txHash = await client.sendTransaction({ to, data: calldata });
-    console.log("Vote transaction hash:", txHash);
-  }
+  // Auto-vote disabled — propose only, let editors review before voting
+  // if (proposalId && isEditor && authorSpaceId) {
+  //   const result = daoSpace.voteProposal({
+  //     authorSpaceId: authorSpaceId,
+  //     spaceId: spaceId,
+  //     proposalId: proposalId,
+  //     vote: "YES"
+  //   })
+  //   to = result.to;
+  //   calldata = result.calldata;
+  //   const txHash = await client.sendTransaction({ account: client.account, to, data: calldata });
+  //   console.log("Vote transaction hash:", txHash);
+  // }
   return txHash;
 }
 

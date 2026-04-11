@@ -1,13 +1,46 @@
+import * as fs from 'fs';
 import { gql } from './src/functions.js';
 import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK, SPACES } from './src/constants.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
-// Finds duplicate Type and Property entities (by name, case-insensitive)
-// across the listed spaces. For Properties, shows data type and flags mismatches.
+// Finds duplicate entities (by name, case-insensitive) for the given types
+// across the listed spaces. Also cross-checks against no_type_entities.csv
+// to find typed entities with no-type twins.
 // Run with: bun run 02_find_duplicates.ts
 
 const spaceRank = new Map(SPACES.map((s, i) => [s.id, i]));
 const spaceName = new Map(SPACES.map(s => [s.id, s.name]));
+
+// ─── Load no-type CSV ───────────────────────────────────────────────────────
+
+interface NoTypeEntry { id: string; name: string; spaceId: string; spaceName: string; }
+
+function loadNoTypeCsv(path: string): Map<string, NoTypeEntry[]> {
+  const byName = new Map<string, NoTypeEntry[]>();
+  if (!fs.existsSync(path)) {
+    console.log('⚠ no_type_entities.csv not found — skipping no-type cross-check\n');
+    return byName;
+  }
+  const lines = fs.readFileSync(path, 'utf-8').split('\n').slice(1); // skip header
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    // Parse CSV (handles quoted fields with commas)
+    const match = line.match(/^([^,]+),(".*?"|[^,]*),([^,]+),(.+)$/);
+    if (!match) continue;
+    const id = match[1];
+    const name = match[2].replace(/^"|"$/g, '').replace(/""/g, '"').trim();
+    const spaceId = match[3];
+    const sName = match[4];
+    if (!name) continue;
+    const key = name.toLowerCase();
+    const list = byName.get(key) ?? [];
+    list.push({ id, name, spaceId, spaceName: sName });
+    byName.set(key, list);
+  }
+  return byName;
+}
+
+const noTypeByName = loadNoTypeCsv('./no_type_entities.csv');
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -15,7 +48,7 @@ interface EntityHit {
   id: string;
   name: string;
   spaceId: string;
-  dataType?: string | null; // SDK type name for properties, null = relation-only
+  dataType?: string | null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -64,7 +97,6 @@ async function getPropertyDataType(propertyId: string): Promise<string | null> {
   }`);
   const rels = data.relations ?? [];
   if (rels.length === 0) return null;
-  // Try hardcoded map first, fall back to entity name (lowercased)
   const toEntityId = rels[0].toEntityId;
   const mapped = DATA_TYPE_TO_SDK[toEntityId];
   if (mapped) return mapped;
@@ -87,10 +119,8 @@ async function countBacklinks(entityId: string): Promise<number> {
 
 async function main() {
   const categories = [
-    //{ label: 'Type', typeId: TYPES.type },
-    //{ label: 'Property', typeId: TYPES.property },
-    { label: 'Role', typeId: "e4e366e9d5554b6892bf7358e824afd2" },
-    { label: 'Skill', typeId: "9ca6ab1f3a114e49bbaf72e0c9a985cf" },
+    // Person type across all spaces
+    { label: 'Person', typeId: '7ed45f2bc48b419e8e4664d5ff680b0d' },
   ];
 
   for (const { label, typeId } of categories) {
@@ -189,6 +219,38 @@ async function main() {
         console.log(`  Secondary:  entityId=${sec.id}  spaceId=${sec.spaceId} (${spaceName.get(sec.spaceId)})${dtLabel(sec)}`);
       }
       console.log();
+    }
+
+    // ─── No-type cross-check ─────────────────────────────────────────────────
+    // For each typed entity, check if a no-type entity with the same name exists
+    const noTypeMatches: { typed: EntityHit; noType: NoTypeEntry[] }[] = [];
+    const seenTypedNames = new Set<string>();
+    for (const hit of allHits) {
+      const key = hit.name.toLowerCase();
+      if (seenTypedNames.has(key)) continue;
+      seenTypedNames.add(key);
+      const noTypes = noTypeByName.get(key);
+      if (noTypes && noTypes.length > 0) {
+        // Exclude if the no-type entity IS the same entity ID
+        const different = noTypes.filter(nt => nt.id !== hit.id);
+        if (different.length > 0) {
+          noTypeMatches.push({ typed: hit, noType: different });
+        }
+      }
+    }
+
+    if (noTypeMatches.length > 0) {
+      console.log(`\n── ${label}: ${noTypeMatches.length} typed ↔ no-type match(es) ──\n`);
+      for (const m of noTypeMatches) {
+        console.log(`"${m.typed.name}"  type=${label}`);
+        console.log(`  Typed:    entityId=${m.typed.id}  spaceId=${m.typed.spaceId} (${spaceName.get(m.typed.spaceId)})`);
+        for (const nt of m.noType) {
+          console.log(`  No-type:  entityId=${nt.id}  spaceId=${nt.spaceId} (${nt.spaceName})`);
+        }
+        console.log();
+      }
+    } else {
+      console.log(`  No typed ↔ no-type matches for ${label}.\n`);
     }
   }
 }

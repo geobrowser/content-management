@@ -16,7 +16,7 @@ import path from 'node:path';
 // Property duplicates with data type mismatches are SKIPPED (logged as warnings).
 // Run with: bun run 03_merge_duplicates.ts
 
-const DRY_RUN = false;; // Set to false to actually publish merges
+const DRY_RUN = true; // Set to false to actually publish merges
 
 const spaceRank = new Map(SPACES.map((s, i) => [s.id, i]));
 const spaceName = new Map(SPACES.map(s => [s.id, s.name]));
