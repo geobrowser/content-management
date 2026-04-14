@@ -1,10 +1,11 @@
-import { printOps } from './src/functions.js';
+import { printOps, publishOps } from './src/functions.js';
 import {
   deleteEntity,
   changeEntityId,
   changeSpace,
   mergeEntities,
   migratePropertyReferences,
+  type OpsBatch,
 } from './src/entity_ops.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -12,15 +13,41 @@ import {
 //   bun run 05_entity_operations.ts
 
 // ─── 1. Delete Entity ──────────────────────────────────────────────────────
-const spaceId = 'bd5529695e011fdf76637d4addca733a';
-const entityId = '3a65270068774755bf4f379ef2b0f371';
-const ops = await deleteEntity({
-  entityId,
-  spaceId,
-  // dryRun: true,           // set to true to preview without publishing
-  // skipOrphanCleanup: true, // set to true to skip recursive orphan deletion
-});
-printOps(ops, '.', 'delete_entity_ops.txt');
+// const spaceId = 'bd5529695e011fdf76637d4addca733a';
+// const entityId = '3a65270068774755bf4f379ef2b0f371';
+// const ops = await deleteEntity({
+//   entityId,
+//   spaceId,
+//   // dryRun: true,           // set to true to preview without publishing
+//   // skipOrphanCleanup: true, // set to true to skip recursive orphan deletion
+// });
+// printOps(ops, '.', 'delete_entity_ops.txt');
+/**/
+
+// ─── 1b. Delete Multiple Entities ──────────────────────────────────────────
+// Batches delete ops for multiple entities and publishes them together.
+//*
+const spaceId = 'b46ed2967a16c493900eb16aa4dee90e';
+const entityIds = [
+  "4f8771a0f59446dba33ffeafe7f1516d",
+  "72d335b3204544df8d86a76392e84041",
+  "c728bf4c06614c1194bd97dfceb9b7ff"
+];
+const batch: OpsBatch = new Map();
+const deletingIds = new Set(entityIds);
+for (const entityId of entityIds) {
+  await deleteEntity({
+    entityId,
+    spaceId,
+    opsBatch: batch,
+    deletingIds,
+    // skipOrphanCleanup: true,
+  });
+}
+// Publish everything as a single transaction
+const ops = batch.get(spaceId) ?? [];
+printOps(ops, '.', 'delete_multiple_entities_ops.txt');
+await publishOps(ops, `Delete ${entityIds.length} entities`, spaceId);
 /**/
 
 // ─── 2. Move Entity: Change Entity ID ──────────────────────────────────────

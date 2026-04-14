@@ -342,6 +342,8 @@ export interface DeleteEntityOptions {
   entityDataCache?: Map<string, EntityData>;
   /** If provided, look up backlinks for orphan targets here before querying */
   backlinksCache?: Map<string, BacklinkRecord[]>;
+  /** Set of all entity IDs being deleted in this batch — orphan checks ignore these */
+  deletingIds?: Set<string>;
 }
 
 /**
@@ -353,7 +355,8 @@ export interface DeleteEntityOptions {
  * Returns the generated ops (and publishes them unless dryRun is set).
  */
 export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> {
-  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [], opsBatch, prefetchedEntityData, entityDataCache, backlinksCache } = options;
+  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [], opsBatch, prefetchedEntityData, entityDataCache, backlinksCache, deletingIds } = options;
+  const isBeingDeleted = (id: string) => id === entityId || !!deletingIds?.has(id);
 
   const cached = prefetchedEntityData ?? entityDataCache?.get(entityId);
   console.log(`\n[deleteEntity] ${cached ? 'Using prefetched data for' : 'Querying'} entity ${entityId} in space ${spaceId}...`);
@@ -394,21 +397,27 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
 
   // Orphan cleanup: check if any "to" entities are now orphaned
   if (!skipOrphanCleanup && toEntityIds.length > 0) {
-    const uniqueToIds = [...new Set(toEntityIds)].filter(id => !excludeFromOrphanCheck.includes(id));
+    const uniqueToIds = [...new Set(toEntityIds)].filter(id => !excludeFromOrphanCheck.includes(id) && !isBeingDeleted(id));
 
     // Check all orphan candidates in parallel, using cache when available
     const orphanChecks = await Promise.all(
       uniqueToIds.map(async toId => {
         const remainingBacklinks = backlinksCache?.get(toId) ?? await queryBacklinks(toId);
-        const externalBacklinks = remainingBacklinks.filter(bl => bl.fromEntityId !== entityId);
+        const externalBacklinks = remainingBacklinks.filter(bl => !isBeingDeleted(bl.fromEntityId));
         return { toId, isOrphan: externalBacklinks.length === 0 };
       })
     );
 
-    // Recursively delete orphans in parallel, passing caches through
-    const orphanIds = orphanChecks.filter(c => c.isOrphan).map(c => c.toId);
+    // Re-check deletingIds here to avoid racing with a sibling recursion that
+    // may have already claimed the same orphan.
+    const orphanIds = orphanChecks
+      .filter(c => c.isOrphan && !deletingIds?.has(c.toId))
+      .map(c => c.toId);
     if (orphanIds.length > 0) {
       console.log(`  ${orphanIds.length} orphaned entities detected — recursively deleting`);
+      if (deletingIds) {
+        for (const id of orphanIds) deletingIds.add(id);
+      }
       const orphanResults = await Promise.all(
         orphanIds.map(toId =>
           deleteEntity({
@@ -419,6 +428,7 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
             excludeFromOrphanCheck,
             entityDataCache,
             backlinksCache,
+            deletingIds,
           })
         )
       );
