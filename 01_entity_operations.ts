@@ -1,10 +1,11 @@
-import { printOps } from './src/functions.js';
+import { printOps, publishOps } from './src/functions.js';
 import {
   deleteEntity,
   changeEntityId,
   changeSpace,
   mergeEntities,
   migratePropertyReferences,
+  type OpsBatch,
 } from './src/entity_ops.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -21,6 +22,28 @@ const ops = await deleteEntity({
   // skipOrphanCleanup: true, // set to true to skip recursive orphan deletion
 });
 printOps(ops, '.', 'delete_entity_ops.txt');
+/**/
+
+// ─── 1b. Delete Multiple Entities ──────────────────────────────────────────
+// Batches delete ops for multiple entities and publishes them together.
+/*
+const spaceId = 'SPACE_ID';
+const entityIds = ["ENTITY_ID_1", "ENTITY_ID_2", "ENTITY_ID_3"];
+const batch: OpsBatch = new Map();
+const deletingIds = new Set(entityIds);
+for (const entityId of entityIds) {
+  await deleteEntity({
+    entityId,
+    spaceId,
+    opsBatch: batch,
+    deletingIds,
+    // skipOrphanCleanup: true,
+  });
+}
+// Publish everything as a single transaction
+const ops = batch.get(spaceId) ?? [];
+printOps(ops, '.', 'delete_multiple_entities_ops.txt');
+await publishOps(ops, `Delete ${entityIds.length} entities`, spaceId);
 /**/
 
 // ─── 2. Move Entity: Change Entity ID ──────────────────────────────────────

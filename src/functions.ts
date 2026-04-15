@@ -57,7 +57,8 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
 
       return json.data;
     } catch (error: any) {
-      const isRetryable = error.message?.includes('fetch failed') ||
+      const isRetryable = error instanceof SyntaxError ||
+        error.message?.includes('fetch failed') ||
         error.message?.includes('ECONNRESET') ||
         error.message?.includes('ETIMEDOUT') ||
         error.message?.includes('socket hang up');
