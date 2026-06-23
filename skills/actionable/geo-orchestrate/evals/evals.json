@@ -1,0 +1,26 @@
+{
+  "skill_name": "geo-orchestrate",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to add a Web URL to every Person in the AI space.",
+      "expected_output": "Intent restated, then Discover (schema + duplicate candidates + off-schema delta), then the Plan template, then a DRY_RUN script the editor runs — not executed by the skill.",
+      "files": [],
+      "assertions": [
+        "Produces all four Discover outputs (schema, duplicate candidates, current state, off-schema delta)",
+        "Posts the Discovery + Gates + Plan template as one message and waits for 'go'",
+        "Writes a .ts script with DRY_RUN = true and does NOT run it unless explicitly asked"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What types are in the crypto space?",
+      "expected_output": "Recognizes this is a pure read question and routes to geo-query instead of generating a script.",
+      "files": [],
+      "assertions": [
+        "Routes to geo-query (read) and does not write or run a script",
+        "Does not emit the publish Plan template for a read-only question"
+      ]
+    }
+  ]
+}

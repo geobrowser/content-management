@@ -164,6 +164,7 @@ async function fetchAllConnectionNodes<T>(
     if (!cursor) throw new Error(`fetchAllConnectionNodes: "${connectionName}" hasNextPage=true but endCursor is empty`);
     if (afterClause.includes(cursor)) throw new Error(`fetchAllConnectionNodes: "${connectionName}" endCursor did not advance (${cursor})`);
     afterClause = `, after: "${cursor}"`;
+  }
   return all;
 }
 
@@ -655,6 +656,13 @@ export interface MergeEntitiesOptions {
   mainSpaceId: string;
   /** Entities to merge into the main entity and then delete */
   secondaries: Array<{ entityId: string; spaceId: string }>;
+  /**
+   * Safety override. By default the merge refuses to delete/replace any
+   * secondary that lives in a canonical (DAO) space — a canonical entity must
+   * never be the merge loser (see the Canonical-Delete rule). Set true ONLY
+   * with explicit authorization to mutate canonical data.
+   */
+  allowCanonicalDelete?: boolean;
   /** If true, generate ops but don't publish */
   dryRun?: boolean;
   /** If true, add missing value properties and non-duplicate relations from secondaries onto the main entity (default: true) */
@@ -685,12 +693,38 @@ export interface MergeEntitiesOptions {
 export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]> {
   const {
     mainEntityId: inputMainEntityId, mainSpaceId, secondaries, dryRun = false,
-    addPropertiesToMain = true, opsBatch,
+    addPropertiesToMain = true, allowCanonicalDelete = false, opsBatch,
     entityDataCache: inputEntityDataCache,
     backlinksCache: inputBacklinksCache,
   } = options;
 
   console.log(`\n[mergeEntities] Merging ${secondaries.length} entities into ${inputMainEntityId} (space ${mainSpaceId})`);
+
+  // ── Canonical-Delete guard (Option B): a canonical (DAO) entity must never
+  // be the merge loser. Secondaries are the entities that get stripped+deleted
+  // (same-space) or replaced via changeEntityId (cross-space) — and for two
+  // same-space candidates the helper auto-picks a survivor and deletes the
+  // other, so two canonical duplicates can nuke a canonical space. Refuse if
+  // any secondary lives in a non-PERSONAL space (fail-safe: also refuse when a
+  // space's type can't be verified) unless explicitly overridden.
+  if (!allowCanonicalDelete && secondaries.length > 0) {
+    const secondarySpaceIds = [...new Set(secondaries.map(s => s.spaceId))];
+    const spaceData = await gql(`{
+      spaces(filter: { id: { in: [${secondarySpaceIds.map(id => `"${id}"`).join(', ')}] } }) { id type }
+    }`);
+    const typeBySpace = new Map<string, string>((spaceData.spaces ?? []).map((s: any) => [s.id, s.type]));
+    const unsafe = secondaries.filter(s => (typeBySpace.get(s.spaceId) ?? 'UNKNOWN') !== 'PERSONAL');
+    if (unsafe.length > 0) {
+      const list = unsafe.map(s => `${s.entityId} (space ${s.spaceId}: ${typeBySpace.get(s.spaceId) ?? 'type unverifiable'})`).join(', ');
+      throw new Error(
+        `[mergeEntities] Refusing to merge — a canonical entity would be deleted/replaced. ` +
+        `${unsafe.length} secondary entity(ies) are not in a PERSONAL space: ${list}. ` +
+        `A canonical (DAO) entity must never be the merge loser: make the canonical entity the Main (it survives) and merge personal copies into it, ` +
+        `or for two canonical duplicates use the manual governance procedure. ` +
+        `Pass allowCanonicalDelete: true only with explicit authorization to mutate canonical data.`
+      );
+    }
+  }
 
   // Check if the main entity is a Property type — if so, we'll auto-migrate property references
   const mainEntityData = await gql(`{

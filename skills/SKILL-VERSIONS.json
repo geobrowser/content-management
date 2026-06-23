@@ -1,0 +1,40 @@
+{
+  "_doc": "Approved version of each editor-facing skill. Regenerate with skill-dev/skill_versions.py generate after reviewing a change.",
+  "skills": {
+    "actionable/geo-clean": {
+      "version": "0.1.0",
+      "approved_commit": "9c157809d813c254870860782e5ce52b04287a68",
+      "content_sha256": "d76b2f0776b2a3d540e5cbf5715c816358f8fb76c038059632530ea74af29e23"
+    },
+    "actionable/geo-discovery": {
+      "version": "0.1.0",
+      "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
+      "content_sha256": "c72b7c04bc8939766e058e92ed714981c57eb97b1442f27e6e92cc6eb8c5a944"
+    },
+    "actionable/geo-orchestrate": {
+      "version": "0.1.0",
+      "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
+      "content_sha256": "475fb81b1c817853d450dded5d858ab0858ff7ee1011e79727fce6d2b8b473fe"
+    },
+    "actionable/geo-publish": {
+      "version": "0.3.0",
+      "approved_commit": "3877c64edd987303e3bb7aae0a7d1aa0d26b5b98",
+      "content_sha256": "ff41a3353a54b587d564fce1948e23b84f2e644d7e24bdcffae190f4af38b671"
+    },
+    "non-actionable/geo-press-review": {
+      "version": "0.2.0",
+      "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
+      "content_sha256": "f12045cea5162107c88d83e6aaeba737da0ca432563605ae84c09576e80ca7ce"
+    },
+    "non-actionable/geo-query": {
+      "version": "0.1.0",
+      "approved_commit": "3877c64edd987303e3bb7aae0a7d1aa0d26b5b98",
+      "content_sha256": "29491abd8c5cef513f0c1d5f1ce48e6c310c77ff1e55fcc83fa1c20c6884af68"
+    },
+    "non-actionable/ontology-advisor": {
+      "version": "0.1.0",
+      "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
+      "content_sha256": "5ea2bb42ca7d873114e8278daa2890bc148f5460ac248bcf5a89b2a8082d592d"
+    }
+  }
+}

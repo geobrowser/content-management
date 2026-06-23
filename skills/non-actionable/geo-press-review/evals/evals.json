@@ -1,0 +1,26 @@
+{
+  "skill_name": "geo-press-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Do a press review for the AI space - what should we publish next?",
+      "expected_output": "Pulls external press coverage, compares it against what's published on Geo, and returns a ranked, justified list of stories classified as already-published / needs-update / not-yet-covered. Read-only - recommends, never publishes.",
+      "files": [],
+      "assertions": [
+        "Classifies each story as already-published, needs-update, or not-yet-covered",
+        "Ranks the recommendations and justifies each",
+        "Does not publish anything to Geo (read-only)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Find sources covering the GENIUS Act around June 2026 for the crypto space.",
+      "expected_output": "Source discovery for the given topic + date window, returning candidate sources with links.",
+      "files": [],
+      "assertions": [
+        "Returns concrete sources (with URLs) for the topic and date window",
+        "Stays read-only - surfaces sources, does not publish"
+      ]
+    }
+  ]
+}
