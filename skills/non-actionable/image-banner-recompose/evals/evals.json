@@ -1,0 +1,37 @@
+{
+  "skill_name": "image-banner-recompose",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Make a 2364x640 banner from this book cover (a flat solid-coloured cover like the 1984 Penguin edition).",
+      "expected_output": "A 2364x640 banner where the cover sits centred and sharp, the sides extended in the cover's solid edge colour with no visible seam, all text preserved.",
+      "files": [],
+      "assertions": [
+        "Auto-selects solid_extend (A) because the side edges are near-solid (edge_std < 18)",
+        "Output is exactly 2364x640 and the cover's text is fully visible",
+        "QA runs in mode='edge' and passes (no seam, colour + brightness match the edge)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Turn this painted/photographic book cover into a wide header (e.g. the Madame Bovary portrait cover).",
+      "expected_output": "A 2364x640 banner with a full-bleed blurred copy of the cover behind the sharp centred cover, looking designed, text preserved.",
+      "files": [],
+      "assertions": [
+        "Auto-selects blurred_backdrop (B) because the edges are busy/photographic",
+        "QA runs in mode='whole' and passes (fill compared to the whole cover, not the edge)",
+        "The centred cover is sharp (unsharp finishing pass applied)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Make a banner from this small 180x279 cover image.",
+      "expected_output": "Warns that the source is low-resolution and the centred subject will be soft, then proceeds (or asks) and still outputs exactly 2364x640.",
+      "files": [],
+      "assertions": [
+        "Calls the low-res guard and warns the source is under ~500px tall before composing",
+        "Still produces a valid 2364x640 output"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "skill_name": "geo-query",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Look up the entity 4faff0b210cb49958e20109409b8699c and show its name, types, and properties.",
+      "expected_output": "A single-entity fetch via the entity(id:) query returning name, types, and typed value fields.",
+      "files": [],
+      "assertions": [
+        "Uses the entity(id: \"...\") query (single-entity lookup), not a list query",
+        "Reads typed value fields (text/date/boolean/...), not a single 'value' field",
+        "Does not wrap entity fields in nodes { ... }"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Find the first 50 Person entities in the AI space (41e851610e13a19441c4d980f2f2ce6b).",
+      "expected_output": "A bounded search using entities(typeId, spaceId, first: 50) returning a flat array of id/name.",
+      "files": [],
+      "assertions": [
+        "Passes typeId and spaceId as top-level args (not inside filter)",
+        "Treats entities() as a flat array (no nodes wrapper)",
+        "Uses first: 50 (a small bounded lookup)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "List every Claim in the AI space — there are several thousand.",
+      "expected_output": "Recognizes the result set exceeds the offset-1000 cap and uses entitiesConnection with cursor pagination.",
+      "files": [],
+      "assertions": [
+        "Uses entitiesConnection with after/endCursor pagination",
+        "Does not paginate entities() past offset 1000",
+        "Loops until pageInfo.hasNextPage is false"
+      ]
+    }
+  ]
+}

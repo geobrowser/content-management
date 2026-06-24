@@ -1,0 +1,23 @@
+{
+  "skill_name": "skill-quality-check",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Check the skill at skills/actionable/geo-publish for quality problems.",
+      "expected_output": "Flags the dangling bundled references (reference.md and examples/*.md do not exist) and the missing evals/evals.json; reports frontmatter as valid; does NOT flag any Geo domain content (PK_SW, endpoints, type IDs).",
+      "files": ["skills/actionable/geo-publish/SKILL.md"]
+    },
+    {
+      "id": 2,
+      "prompt": "Check the skill at skills/non-actionable/geo-query for quality problems.",
+      "expected_output": "Flags reference.md (244 lines) missing a table of contents and the missing evals/evals.json; frontmatter and referenced examples pass; no domain content flagged.",
+      "files": ["skills/non-actionable/geo-query/SKILL.md"]
+    },
+    {
+      "id": 3,
+      "prompt": "Check the skill at skills/actionable/geo-clean for quality problems.",
+      "expected_output": "Flags the dangling reference documentation/big-merge.md, the undefined 'Pattern B/C/D' vocabulary (defined in another skill), and missing evals; does not flag the dated incident (historical justification) or the src/ runtime imports.",
+      "files": ["skills/actionable/geo-clean/SKILL.md"]
+    }
+  ]
+}

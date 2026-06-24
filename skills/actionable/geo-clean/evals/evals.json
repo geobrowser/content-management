@@ -1,0 +1,37 @@
+{
+  "skill_name": "geo-clean",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Find duplicate Person entities in the AI space and merge each group.",
+      "expected_output": "A read-only duplicate-find first, then a Merge plan that picks Main by backlinks, runs the gates, dry-runs, and waits for an explicit publish.",
+      "files": [],
+      "assertions": [
+        "Groups by lowercased/trimmed name and paginates the listing to completion",
+        "Designates Main = member with the most incoming backlinks (paginated to completion)",
+        "Emits the Discovery + Gates + Plan template and waits for 'go', then 'publish' before any destructive op",
+        "Logs per-entity decisions ([MERGE]/[DELETE]/[SKIP]) — no silent ops"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Merge the 'ethereum' duplicate group where the canonical has 253 incoming backlinks.",
+      "expected_output": "The Big-Merge HARD-STOP gate fires (over 100 backlinks) and the skill refuses to auto-merge.",
+      "files": [],
+      "assertions": [
+        "Fires the Big-Merge gate when a member has > 100 backlinks or total ops > 200",
+        "Stops and offers skip / force-big-merge rather than proceeding automatically"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Delete the orphan entity abc123 that I no longer need.",
+      "expected_output": "Checks incoming relations first; refuses to delete if any exist unless the editor force-confirms.",
+      "files": [],
+      "assertions": [
+        "Counts incoming backlinks before generating any delete op",
+        "Refuses to delete an entity with backlinks unless 'force delete <id>' is typed exactly"
+      ]
+    }
+  ]
+}
