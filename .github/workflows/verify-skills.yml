@@ -1,0 +1,27 @@
+name: Verify skill integrity
+
+# Fails the build if any shipped skill changed without being re-approved
+# (bump version + changelog + `python3 skill-dev/skill_versions.py generate`).
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - "skill-dev/skill_versions.py"
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - "skill-dev/skill_versions.py"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the script reads git log/ls-files — needs full history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify skills match their approved versions
+        run: python3 skill-dev/skill_versions.py verify
