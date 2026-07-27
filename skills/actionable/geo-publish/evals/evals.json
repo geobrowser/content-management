@@ -1,0 +1,51 @@
+{
+  "skill_name": "geo-publish",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a Person entity 'Ada Lovelace' in my personal space with the Wikipedia page as a Web URL.",
+      "expected_output": "A plan-confirmation message first, the pre-publish gates run, then a DRY_RUN script that creates the entity correctly.",
+      "files": [],
+      "assertions": [
+        "Posts the plan (Space / Name / Type / Description) and waits for 'go' before writing the script",
+        "Runs the semantic-duplicate gate and the schema-violation gate",
+        "Script defaults DRY_RUN = true and collects all ops into one array, publishing once",
+        "Name has no trailing period; description ends with a period; Web URL is published as type 'text'"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Publish the claim 'Bitcoin is a store of value' to the crypto space.",
+      "expected_output": "Runs the semantic-duplicate gate with the exact-meaning rule for Claims; stops and asks if a same-meaning claim already exists.",
+      "files": [],
+      "assertions": [
+        "Applies the exact-meaning duplicate rule for Claims (rephrasings = duplicates; partial overlaps are not)",
+        "Stops and surfaces a use-existing / publish-anyway choice if a likely duplicate is found",
+        "Never publishes without an explicit confirmation"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Create an entity called 'Elon Musk' in my personal space. No type, just the name and a description.",
+      "expected_output": "Gate 4 fires: the skill refuses the typeless create, proposes a type (Person), and only proceeds once a type is agreed.",
+      "files": [],
+      "assertions": [
+        "Gate 4 (type-required) FIREs in the Gates block; the plan is not executed as asked",
+        "Proposes at least one concrete type for the entity instead of just refusing",
+        "Offers no 'publish anyway' path for a typeless create",
+        "The generated script uses the createTypedEntity wrapper (no raw Graph.createEntity)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Publish the claim 'The sky is blue' (type Claim) to my personal space, and attach a new source entity for it pointing at https://example.com/sky.",
+      "expected_output": "Gate 4 checks the INLINE relation target too: the new source entity must also carry a type (e.g. Source/Article), not just the headline claim.",
+      "files": [],
+      "assertions": [
+        "The inline-created source entity gets a type; a typeless source target fires Gate 4",
+        "The dry-run output lists BOTH created entities as 'Creating: <name> [<type>]'",
+        "All ops collected into one array and published once"
+      ]
+    }
+  ]
+}

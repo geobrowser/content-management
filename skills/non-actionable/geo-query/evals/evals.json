@@ -1,0 +1,92 @@
+{
+  "skill_name": "geo-query",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Look up the entity 7ed45f2bc48b419e8e4664d5ff680b0d and show its name, types, and properties.",
+      "expected_output": "A single-entity fetch via the entity(id:) query returning name, types, and typed value fields (this ID is the Person type entity — stable fixture).",
+      "files": [],
+      "assertions": [
+        "Uses the entity(id: \"...\") query (single-entity lookup), not a list query",
+        "Reads typed value fields (text/date/boolean/...), not a single 'value' field",
+        "Does not wrap entity fields in nodes { ... }",
+        "If the result comes back as an empty stub (null name, empty spaceIds/types), reports the entity does not exist rather than presenting the stub"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Find the first 50 Person entities in the AI space (41e851610e13a19441c4d980f2f2ce6b).",
+      "expected_output": "A bounded search using entities(typeId, spaceId, first: 50) returning a flat array of id/name.",
+      "files": [],
+      "assertions": [
+        "Passes typeId and spaceId as top-level args (not inside filter)",
+        "Treats entities() as a flat array (no nodes wrapper)",
+        "Uses first: 50 (a small bounded lookup)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "List every Claim in the AI space — there are several thousand.",
+      "expected_output": "Recognizes the result set exceeds the pagination caps and uses entitiesConnection with cursor pagination.",
+      "files": [],
+      "assertions": [
+        "Uses entitiesConnection with after/endCursor pagination",
+        "Does not paginate past offset 1000 on ANY shape (offset caps apply to Connections too) and keeps first <= 1000",
+        "Loops until pageInfo.hasNextPage is false"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Which News stories in the World affairs space (89bd89bf28ff8a0963faf92a8c905e20) are about the Iran War topic (10ed4f5ac9b84917ac801d0478fdbb69)?",
+      "expected_output": "ONE server-side filtered query (entities with relations:{some:{toEntityId}} or relations(toEntityId:) / backlinks) — never a per-story loop.",
+      "files": [],
+      "assertions": [
+        "Uses a single server-side relation filter, not an N+1 loop fetching each story's relations",
+        "Scopes the relation filter with spaceId",
+        "Paginates the filtered result with cursors if it may exceed 1000"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "List the blocks/tables of page 49fbca0730974581a9f0300d52fd22d6 (the World affairs space page) in the order they appear on the page.",
+      "expected_output": "Fetches the page's Blocks relations with the position field and orders by it (server orderBy: POSITION_ASC or lexicographic sort) — not response order.",
+      "files": [],
+      "assertions": [
+        "Requests the position field on the Blocks relations",
+        "Orders blocks by position (POSITION_ASC or lexicographic client sort), not natural response order"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "A Blocks relation has edge id X and entityId Y. Read the relation's own properties (e.g. its view setting).",
+      "expected_output": "Reads the relation ENTITY (entityId / inline entity{}), never the edge id — and checks the relation-entity's relations too, not just values.",
+      "files": [],
+      "assertions": [
+        "Targets entityId (or the inline entity{} field), NOT the relation edge id",
+        "Checks both valuesList and relationsList on the relation entity (settings like View are relations)"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Find Person entities that are missing a name.",
+      "expected_output": "A none-exclusion (or valuesExist) filter SCOPED by spaceId/typeId — with the warning that unscoped exclusion runs ~20x slower.",
+      "files": [],
+      "assertions": [
+        "Uses values:{none:...} or valuesExist with a spaceId (and typeId) scope",
+        "Does not run the exclusion unscoped across the whole graph without flagging the cost"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "The entity 2f8238b2f4c899fb23b4a2f8aabd996c shows the type 'Topic' six times. Does it have duplicate types that need cleaning up?",
+      "expected_output": "Groups the Types edges by relation spaceId: cross-space repeats are healthy multi-space assertions, NOT duplicates; only same-space repeats are flagged as true duplicates, named by space.",
+      "files": [],
+      "assertions": [
+        "Queries the Types relations (typeId 8f151ba4de204e3c9cb499ddf96f48f1) with the nodes{} wrapper and reads spaceId per edge",
+        "Does NOT report cross-space type repeats as duplicates; explains one Types edge per space is normal for multi-space entities",
+        "Flags only same-space repeats as true duplicates and names the space they're in",
+        "Notes that a cross-space edge can't be deleted from outside its own space (silent no-op)"
+      ]
+    }
+  ]
+}
