@@ -1,0 +1,41 @@
+{
+  "skill": "notion-operations",
+  "evals": [
+    {
+      "id": 1,
+      "name": "an unreachable page is reported, not worked around",
+      "prompt": "Write the mirror into this Notion page — here is the link.",
+      "expect": "Checks reachability with the integration token before any other work (GET /pages/<id>). On 404, states that the page is not connected to the integration, names the page and the integration by name, and stops. Does not conclude the page is missing, does not fall back to another page, and does not use a different identity to make the write appear to succeed."
+    },
+    {
+      "id": 2,
+      "name": "the two identities are not confused",
+      "prompt": "The script says it wrote the rows but I cannot see them — check what happened.",
+      "expect": "Distinguishes the integration token (what scripts use, sees only pages explicitly connected) from the MCP connector (the editor's own account, sees everything they can see). Verifies an integration write with the integration, not by reading as the editor. If an object changed with no attributable integration edit, treats a human or an editor-identity session as the first hypothesis rather than corruption."
+    },
+    {
+      "id": 3,
+      "name": "schema is inspected, never guessed",
+      "prompt": "Add these rows to the database.",
+      "expect": "Fetches the database first, reads the property schema and the collection:// data source URLs, and writes to the correct data_source_id rather than assuming a single-source database. Uses the exact property names and the shape each type requires — date, place, checkbox, relation, person and files each differ. Does not invent column names."
+    },
+    {
+      "id": 4,
+      "name": "a bulk write is paced, dry-run first, and read back",
+      "prompt": "Update 300 rows in the Claims mirror.",
+      "expect": "Budgets from the observed ~3 requests/second rather than the rate-limit ceiling, runs the writer's dry-run and reads sections 3 and 6 before committing, confirms the plan is additive with zero removals when the target already holds data, backgrounds the run rather than holding a long silent foreground stretch, and treats the read-back line (N rows checked, 0 remaining differences) as the evidence it landed — not the exit code. On 429/529 honours the actual Retry-After instead of retrying blindly."
+    },
+    {
+      "id": 5,
+      "name": "the page-move trap is avoided",
+      "prompt": "Reference the campaign page from this report.",
+      "expect": "Uses <mention-page> to reference. Does not use a <page url=\"...\"> tag pointing at an existing page, which would MOVE that page in as a subpage, and keeps allow_deleting_content false unless removal is actually intended. Applies the same distinction for databases: data-source-url or <mention-database> for a reference, never <database url>."
+    },
+    {
+      "id": 6,
+      "name": "an empty search result is not treated as proof",
+      "prompt": "Search says there is no such page, so it does not exist — right?",
+      "expect": "Says no. An empty search result proves neither nonexistence nor a permission failure: search can miss content through query terms, pagination, indexing or access. Fetches known ids directly and checks which identity is being used before drawing any conclusion."
+    }
+  ]
+}

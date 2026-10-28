@@ -1,0 +1,55 @@
+{
+  "skill_name": "geo-claim-grouping",
+  "evals": [
+    {
+      "id": "two-step-order",
+      "prompt": "Group the claims on the AI Debate claims tab and assign their claim relations.",
+      "expected_output": "Step 1 runs first: discovery via the bundled discover_candidates.ts, adjudication of every pair (verdict + confidence + reason), template + `go`, dry-run, and a held-for-review Related-claims proposal. Step 2 (brackets) is refused until the step-1 Related grouping for the batch is published/approved (or explicitly waived).",
+      "files": [],
+      "assertions": [
+        "Discovery runs via skills/actionable/geo-claim-grouping/scripts/discover_candidates.ts, not re-implemented inline",
+        "Step-1 ops create ONLY Related claims (504e5776788844f6a77dba3ee811d8f0) edges, mirrored both directions, property-namespaced ids (typeId8+from12+to12, entity typeId8+to12+from12)",
+        "Step 2 does not run before step 1 is published/approved for the batch, unless the editor explicitly waives the order",
+        "The Discovery + Gates + Plan template is posted and the skill waits for `go` before any Write to scripts/ or bun run of an ops script",
+        "The generated ops script starts with const DRY_RUN = true and reads the decisions file at runtime (no baked-in const pair array); `publish` is a separate reply from `go`"
+      ]
+    },
+    {
+      "id": "strict-bracket-readjudication",
+      "prompt": "Step 1 is approved for these pairs — now assign them to their brackets. Pair X was verdicted SIMILAR in discovery: 'The US should turn its bombing pause into a permanent ceasefire with Iran' / 'The United States announced a two-week ceasefire with Iran.'",
+      "expected_output": "Step-2 brackets are RE-adjudicated under the strict team definitions — discovery verdicts never copy over. This pair is a normative position vs a premise fact (distinct assertions about the same event): RELATED-ONLY, or SUPPORTS if the fact is judged evidence for the position — never a Similar-claims edge.",
+      "files": [],
+      "assertions": [
+        "No step-1 SIMILAR verdict is copied into a Similar-claims bracket without re-adjudication against the strict definition (no material difference in what is claimed)",
+        "Tightly-coupled-but-distinct assertions (stage-of-process, complementary facets, fact-vs-position) land RELATED-ONLY or an argument bracket, not Similar",
+        "Near-identical wording lands DUPLICATE (Duplicate claims edge + duplicates-for-geo-clean.json), never Similar",
+        "Supporting arguments edges run FROM the supported claim TO the supporter; Opposing arguments are mirrored only for mutual debate positions, one-sided rebuttals run FROM the rebutted claim",
+        "When unsure between Similar and Related-only the pair stays RELATED-ONLY"
+      ]
+    },
+    {
+      "id": "copy-cluster-collapse",
+      "prompt": "Assign Supporting arguments: claim T is supported by five claims, four of which are word-for-word copies of 'The ICC has a warrant out for Netanyahu' living in another space.",
+      "expected_output": "One edge per distinct assertion (HARD RULE 8): a single Supporting edge to the deterministic representative (target-home-space copy, else the distinct no-copy-sibling formulation, else lowest id). The other copies are recorded as dedupSuppressed with a representative pointer and routed to duplicates-for-geo-clean.json.",
+      "files": [],
+      "assertions": [
+        "Only ONE Supporting-arguments edge is proposed for the copy family, to the deterministic representative",
+        "Suppressed rows stay in the decisions file with dedupSuppressed: true and a representative field — they are never deleted from the file",
+        "The copies are routed to duplicates-for-geo-clean.json and named as Duplicate-claims / merge material",
+        "The existing-edge pre-check is SAME-direction only — an approved forward edge never suppresses the intentional mirror direction"
+      ]
+    },
+    {
+      "id": "duplicate-star-linking",
+      "prompt": "Pass 2: link the Duplicate claims for a cluster of 8 identical copies of one claim.",
+      "expected_output": "Star topology: one deterministic canonical per cluster (our-space resident, else lowest id), mirrored Duplicate-claims edges canonical↔each copy only (14 edges for an 8-cluster) — never the full pairwise mesh (56). Copies resident in non-editor spaces ship as a fix package; the geo-clean merge decision stays separate (linking is not merging).",
+      "files": [],
+      "assertions": [
+        "Duplicate-claims edges form a star around one canonical, not a full mesh",
+        "Canonical selection is deterministic: editor-space resident preferred, then lowest id",
+        "Edges whose from-claim lives in a non-editor space go to a fix package, never a forced publish",
+        "The cluster is also queued for a geo-clean merge decision — the links do not replace the merge queue"
+      ]
+    }
+  ]
+}

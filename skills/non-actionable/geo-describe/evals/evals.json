@@ -1,0 +1,50 @@
+{
+  "skill_name": "geo-describe",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write Geo descriptions for these 40 books. Each row has a title, author, and a publisher blurb scraped from the retailer page.",
+      "expected_output": "40 original ~50-word neutral descriptions, none leading with the title, each covering what the book is and why it matters, none lifted from the blurb, each carrying a Source citation; rows it can't verify are flagged, not published.",
+      "files": [],
+      "assertions": [
+        "Extracts facts then composes with the source closed (does not synonym-swap the blurb)",
+        "Each output passes scripts/check_similarity.py (no verbatim run >= 8 words; ROUGE-2/L and Jaccard under thresholds)",
+        "No description starts with the book title, an article, or a pronoun; each is 1-2 sentences (~50 words)",
+        "Every description has at least one Source; output is a review queue, nothing auto-published"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Rewrite this description so it isn't copied from Wikipedia: <a paragraph pasted near-verbatim from a CC BY-SA article>.",
+      "expected_output": "An independently-worded ~50-word description built from the facts only, passing the closeness gate, treating the article as a fact source (so share-alike does not attach); flags for the human if any CC BY-SA expression remains.",
+      "files": [],
+      "assertions": [
+        "Classifies the source as cc-by-sa and treats it as a fact source (re-expresses rather than reusing expression)",
+        "check_similarity.py returns verdict=reject on the original paste and verdict=pass on the rewrite",
+        "If any source expression is reused, surfaces attribution + share-alike obligations to the reviewer"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Describe this AI model. The dataset row claims it 'beats GPT-5 on every benchmark' but cites no source.",
+      "expected_output": "A neutral description of the verifiable facts; the extraordinary unsourced claim is verified at Tier 2 and, if it can't be corroborated across >=2 independent sources, is flagged and withheld rather than stated as fact.",
+      "files": [],
+      "assertions": [
+        "Routes the unsourced superlative claim to Tier 2 multi-source verification",
+        "Does not include the unverified claim as fact; flags it for human review",
+        "Verified facts each carry a Source captured during verification (P6)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Here are 500 token entries from a reputable dataset that already lists an official source URL per row. Generate descriptions.",
+      "expected_output": "Descriptions composed from the provided facts with the existing source kept as the citation (Tier 0); the run does not re-research well-sourced fields, parallelizes, checkpoints, and queues flagged rows.",
+      "files": [],
+      "assertions": [
+        "Treats well-sourced fields as Tier 0 (light check) and does not redundantly re-research them",
+        "Parallelizes verification across rows and checkpoints batch progress",
+        "Each description still passes the originality gate and the description rules"
+      ]
+    }
+  ]
+}

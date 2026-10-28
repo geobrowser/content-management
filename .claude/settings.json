@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "permissions": {
+    "allow": [
+      "Bash(bun install)",
+      "Bash(bun install *)",
+      "Bash(bun run scripts/*)",
+      "Bash(node scripts/*)",
+      "Bash(node --env-file=.env scripts/*)",
+      "Bash(node --env-file=.env.geo-publish scripts/*)",
+      "Bash(node --env-file=.env skills/actionable/*/scripts/*)",
+      "Bash(node --env-file=.env.geo-publish skills/actionable/*/scripts/*)",
+      "Bash(curl *)",
+      "Bash(bun run --env-file=.env scripts/*)",
+      "Bash(bun run --env-file=.env skills/actionable/*/scripts/*)",
+      "Bash(node lib/gql-cli.mjs *)"
+    ],
+    "ask": [
+      "Bash(*--publish*)",
+      "Bash(*--prune*)",
+      "Bash(*--clear-root*)",
+      "Bash(*CONFIRM_DESTRUCTIVE*)",
+      "Bash(*scripts/20*)",
+      "Bash(*inject-publish-example*)",
+      "Bash(*publish_gaps*)",
+      "Bash(*build_dashboard*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Edit(.env)",
+      "Edit(.env.*)"
+    ]
+  }
+}

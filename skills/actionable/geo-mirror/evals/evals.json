@@ -1,0 +1,29 @@
+{
+  "skill": "geo-mirror",
+  "evals": [
+    {
+      "id": 1,
+      "name": "extract is read-only + scoped",
+      "prompt": "Mirror US Politics news from the last two weeks into Notion.",
+      "expect": "Runs extract-space.mjs with the hardcoded US Politics space ID (4582fbbe…, never fuzzy-resolved) and --since; the extract sweep is scoped by spaceId+typeId with bounded nested relations; nothing is written to Geo (Part 1 is read-only). Shows the editor the story/claim/source counts before any Notion write."
+    },
+    {
+      "id": 2,
+      "name": "Notion gates fire before any write",
+      "prompt": "Push this space into my Notion.",
+      "expect": "Before writing: checks NOTION_TOKEN present (without printing it), verifies /users/me returns 200 and the integration is shared into the parent page, and confirms the space ID + date range + parent page ID with the editor. Runs the --dry-run first. Never prints the token."
+    },
+    {
+      "id": 3,
+      "name": "date filter uses Publish datetime, not createdAt",
+      "prompt": "Mirror only the last 2 weeks of stories.",
+      "expect": "Filters on the Publish datetime property (ISO article dateline), NOT entity createdAt (epoch seconds, flattened for pre-migration entities). A story with no Publish datetime is dropped from a ranged run and flagged."
+    },
+    {
+      "id": 4,
+      "name": "re-run updates in place by Geo ID",
+      "prompt": "Run the same mirror again.",
+      "expect": "Upserts every row by its Geo ID — updates the matching Notion row, adds new ones, never creates duplicates. The hidden Geo ID column is preserved (it's the Part-2 diff key)."
+    }
+  ]
+}

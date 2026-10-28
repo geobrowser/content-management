@@ -1,0 +1,181 @@
+{
+  "rules_version": "0.1.0",
+  "ontology_source": "references/ONTOLOGY.md (revision dated 2026-05-21)",
+  "note": "Deterministic rules extracted from ONTOLOGY.md for mechanical checks. The prose ONTOLOGY.md remains authoritative for judgment-layer decisions. The live graph (via geo_graphql.py) is authoritative for schemas and IDs. When this file and the live graph disagree about a property/type, trust the live graph and flag the drift.",
+
+  "canonical_space_ids": {
+    "geo-root":     { "id": "a19c345ab9866679b001d7d2138d88a1", "members": 17, "note": "Geo root space — highest-priority source for reuse. Types and properties here are maximally canonical." },
+    "crypto":       { "id": "c9f267dcb0d270718c2a3c45a64afd32", "members": 238 },
+    "ai":           { "id": "41e851610e13a19441c4d980f2f2ce6b", "members": 238 },
+    "health":       { "id": "52c7ae149838b6d47ce0f3b2a5974546", "members": 221 },
+    "world-affairs": { "id": "89bd89bf28ff8a0963faf92a8c905e20", "members": 116 },
+    "technology":   { "id": "870e3b3068661e6280fad2ab456829bc", "members": 18 }
+  },
+  "canonical_space_note": "When the user names a canonical space by short-name (crypto, ai, health, etc.), look up its ID here — do not re-discover it via GraphQL. Reuse threshold: prefer types/properties from spaces with >3 members; flag anything from a <3-member personal space as unverified.",
+
+  "data_types": ["TEXT", "NUMBER", "TIME", "POINT", "BOOLEAN", "RELATION"],
+
+  "renderable_type_map": {
+    "TEXT": ["URI"],
+    "POINT": ["Geo location"],
+    "RELATION": ["Entity Card", "Image", "Video", "Place", "Address"],
+    "NUMBER": [],
+    "BOOLEAN": [],
+    "TIME": []
+  },
+  "renderable_type_notes": {
+    "RELATION_default": "Entity Card",
+    "NUMBER_options": ["Format", "Unit"],
+    "TIME_options": ["Format"]
+  },
+
+  "canonical_property_names": [
+    "Name", "Description", "Cover", "Avatar", "Tags", "Topics",
+    "Related entities", "Related people", "Related projects", "Related spaces",
+    "Web URL", "Publish date", "Sources",
+    "Website", "X", "LinkedIn", "GitHub", "Telegram", "Discord", "Docs",
+    "Year founded"
+  ],
+  "canonical_property_note": "Reuse these exact names across types. Do not invent synonyms (e.g. 'URL' or 'Site' for 'Web URL'; 'Founded' for 'Year founded'). Fuzzy-matching a submitted header to one of these is a strong signal the header should be normalized to the canonical name before import, since the importer matches columns to property names.",
+
+  "known_property_synonyms": {
+    "_note": "Maps canonical property name -> known synonyms that find_similar_properties() WILL NOT catch because they share no substring with the canonical (e.g. 'Operator' vs 'Maintainers'). When a model proposes a property, it must check this table for synonym redirects in addition to running the substring sweep. Extend this list whenever a new synonym collision is discovered in advisory work.",
+    "Maintainers":  ["Operator", "Operators", "Owners", "Run by", "Operated by", "Managed by"],
+    "Stages":       ["Steps", "Phases"],
+    "Year founded": ["Founded", "Date founded", "Founding year", "Founding date"],
+    "Web URL":      ["URL", "Site", "Link", "Homepage", "Website link"],
+    "Tools used":   ["Tools"],
+    "Sources":      ["Citations", "References"],
+    "Authors":      ["Writer", "Writers", "Created by", "Authored by"]
+  },
+
+  "type_synonyms_to_avoid": {
+    "Person": ["Human", "Individual", "Persona", "People"],
+    "_general": "Do not create a new type that is a synonym of an existing one. Singular form only (Person not People, Company not Companies)."
+  },
+
+  "known_type_duplications": [
+    {
+      "name": "Project",
+      "issue": "Two distinct 'Project' types exist: (1) the broad org-like type (canonical for companies, protocols, organizations, products, initiatives), and (2) a project-management type (scoped unit of planned work with milestones/tasks). Use the broad one for org-like entities. Flag any org-like entity typed with the project-management variant.",
+      "action": "flag_for_human"
+    },
+    {
+      "name": "Person",
+      "issue": "7+ Type entities named 'Person' exist across spaces; name-matching on import will silently bind to one of them. Resolve the Types value to a specific intended Person type ID when precision matters.",
+      "action": "prefer_id_in_types_cell"
+    }
+  ],
+
+  "relation_entity_properties_v1_out_of_scope": [
+    "Employment", "Education", "Audit", "Funding rounds", "Roles", "Funding round"
+  ],
+  "relation_entity_note": "These relation properties carry their own context (dates, role, findings, amounts) on an intermediary relation entity. The CSV importer can only create BARE relations, so this context cannot be expressed via CSV import in v1. If a submitted column maps to one of these (or any column pairs a relation target with adjacent date/role/amount columns), DO NOT flatten it into a bare relation. Flag it as 'relation-entity context — route to SDK/geo-publish or manual entry' so the context is not silently lost.",
+
+  "naming_rules": {
+    "entity_name": {
+      "sentence_case": "Capitalize only the first word and proper nouns. Flag Title Case on common-noun names (e.g. 'Developer Tools' -> 'Developer tools').",
+      "no_parentheticals": {
+        "flag_regex": "\\([^)]*\\)",
+        "message": "No parenthetical context or abbreviations in the name field (e.g. 'Ethereum (blockchain)', 'Federal Bureau of Investigation (FBI)'). Abbreviations belong in a dedicated property; type context belongs in Type and Description."
+      },
+      "people_no_honorifics": {
+        "flag_regex": "^(Dr|Mr|Mrs|Ms|Prof|Professor|President|Senator|Sir|Dame|Rev|Hon)\\.?\\s",
+        "message": "People names: full name only, no honorifics or titles. Titles belong in the Roles property."
+      }
+    },
+    "type_name": {
+      "sentence_case": true,
+      "singular": true,
+      "no_parentheticals": true
+    },
+    "property_name": {
+      "concise_broadly_applicable": "Property and relation names should be concise and reusable, not so specific they describe only one entity.",
+      "plural_for_multivalue": "Use plural names for relation properties that hold multiple values (Topics, Authors, Roles, Team members)."
+    }
+  },
+
+  "description_rules": {
+    "target_max_words": 50,
+    "max_sentences": 2,
+    "third_person": true,
+    "no_leading_article": {
+      "flag_regex": "^(The|A|An)\\s",
+      "message": "Do not open a description with an article (The/A/An)."
+    },
+    "no_leading_entity_name": "Do not start the description with the entity name or a restatement of it (e.g. 'Anthropic is a company. Anthropic was founded...').",
+    "neutral_tone_superlatives_to_flag": [
+      "leading", "world's best", "world's leading", "the best", "best-in-class",
+      "top", "premier", "premiere", "revolutionary", "cutting-edge", "state-of-the-art",
+      "groundbreaking", "unparalleled", "first-ever", "most popular", "industry-leading",
+      "game-changing", "next-generation", "innovative"
+    ],
+    "no_property_repetition": "Do not restate information already captured in a dedicated property (e.g. founding date if Year founded exists)."
+  },
+
+  "value_format_rules": {
+    "TIME": {
+      "preferred_format": "YYYY-MM-DD",
+      "rule": "Use one consistent date format across the whole submission.",
+      "flag": "mixed_date_formats_in_column"
+    },
+    "NUMBER": {
+      "rule": "Plain numeric values only. No currency symbols, thousands separators, or units inside the cell.",
+      "flag_regex": "[^0-9.\\-]"
+    },
+    "TEXT_as_url": {
+      "rule": "URLs must be full, including protocol (https://).",
+      "flag_regex_missing_protocol": "^(?!https?://).+\\."
+    }
+  },
+
+  "csv_structure_rules": {
+    "one_entity_per_row": true,
+    "encoding": "UTF-8",
+    "no_merged_cells": true,
+    "headers_match_property_names": "Each column header should match a Geo property name exactly as it appears in the target space schema; mismatches create orphaned or mis-mapped data. A column-mapping UI step lets the human confirm, so headers are a strong pre-fill, not a hard requirement.",
+    "remove_unused_template_columns": "Drop any empty/unused template columns before import.",
+    "types_column": "A 'Types' column declares each row's entity type by name (or by ID — see resolution_rule)."
+  },
+
+  "import_behavior": {
+    "_source": "Empirically confirmed via import spikes on geobrowser.io, 2026-05-21.",
+    "relation_resolves_by_name": "A relation/Types cell value is matched to an existing entity by NAME, automatically, with no ambiguity prompt.",
+    "name_ambiguity_is_silent": "When a name matches multiple entities (e.g. 'Person' -> 7+ types), the importer binds to one silently. No flag is shown. This is a correctness risk.",
+    "ids_do_not_autoresolve": "An ID placed in a cell does NOT auto-bind; it red-flags as 'needs linking'. However, clicking the flagged cell opens a search PRE-FILLED with the ID that surfaces the exact entity -> a reliable 1-click confirm.",
+    "unmatched_name_creates_project": "A relation target name that matches nothing is NOT flagged — it is silently created as a NEW entity defaulting to type 'Project'. Unguarded imports therefore pollute the graph with mistyped Projects. Catching missing targets before import is the validator's core job.",
+    "import_is_a_proposal": "Imports land as a governance proposal with a preview step; nothing is published until the proposal is accepted.",
+    "intra_batch_linking": "Geo's internal validation links relations to OTHER ROWS in the SAME upload. A relation target that is defined as its own (properly typed) row elsewhere in the upload is created AND linked in one proposal, with the correct type. This is why the validator does NOT split into a separate create-first file: a self-contained upload is created and wired together in a single pass.",
+    "single_upload_is_the_goal": "Prefer ONE upload containing every entity — the main subjects AND any referenced entities that don't yet exist, each present as a properly typed row (in its own tab or rows). Do not fracture a self-contained workbook into sequential files.",
+    "dangling_reference_is_the_real_risk": "The only genuine hazard is a relation target that is NEITHER already in the graph NOR defined as a typed row anywhere in this upload. Such a value hits 'unmatched_name_creates_project' and is silently created as a mistyped Project. The validator's core job is to find these dangling references so the human can complete the upload (add the typed row) or confirm the target exists in the graph.",
+    "multi_sheet_support": "Multi-tab workbooks are supported as a single upload; each tab is an entity type, and cross-tab relations are linked by Geo's internal validation. (If a given import path turns out to accept only single-sheet CSV, fall back to one combined Types-column CSV containing all rows from all tabs — NOT sequential create-first + main files.)"
+  },
+
+  "resolution_rule": {
+    "_purpose": "Per relation/Types value, classify it so the upload stays self-contained and nothing dangles. Resolution checks BOTH the live graph AND the other rows in this upload.",
+    "defined_in_upload": "The value matches the Name of a properly typed row elsewhere in this upload -> leave the NAME as-is; Geo links it intra-batch and creates it with the correct type. No action needed.",
+    "unique_in_graph": "Not in the upload, but exactly one entity matches the name in the resolution space -> emit the canonical NAME (auto-resolves on import, zero clicks).",
+    "ambiguous_in_graph": "Not in the upload, and two or more graph entities match the name -> emit the best-guess entity ID (red-flags on purpose -> guaranteed 1-click confirm) and add ALL candidates to the linking worklist.",
+    "dangling": "Not in the upload AND not in the graph -> this is a dangling reference. DO NOT silently leave the bare name (it becomes a mistyped Project). Surface it as a completeness gap with an inferred type, so the human adds a typed row to the upload (preferred) or confirms/creates the target. Optionally propose the typed rows to append.",
+    "types_column_bias": "For the Types column specifically, prefer emitting the ID whenever the type name is not unique in the resolution space (wrong type = wrong schema)."
+  },
+
+  "flag_for_human_triggers": [
+    "duplicate_entity_in_submission",
+    "entity_resolves_to_multiple_graph_entities",
+    "free_text_value_where_a_graph_entity_exists",
+    "relation_entity_context_in_flat_sheet",
+    "org_like_entity_typed_as_project_management_project",
+    "column_maps_to_no_known_or_live_property",
+    "dangling_relation_target_not_in_upload_or_graph",
+    "name_field_contains_parenthetical_or_honorific",
+    "description_violates_tone_or_format_rules"
+  ],
+
+  "quality_metrics": [
+    "Accuracy & factuality",
+    "Structure & ontology",
+    "Relevance",
+    "Completeness"
+  ]
+}

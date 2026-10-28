@@ -1,0 +1,70 @@
+name: Notify Discord on main push
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so we can diff the push
+
+      - name: Summarize changes and post to Discord
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DISCORD_WEBHOOK:   ${{ secrets.DISCORD_WEBHOOK }}
+          BEFORE:      ${{ github.event.before }}
+          AFTER:       ${{ github.sha }}
+          REPO:        ${{ github.repository }}
+          COMPARE_URL: ${{ github.event.compare }}
+        run: |
+          set -euo pipefail
+
+          # Commit subjects + diff for this push (with fallbacks for first/force push)
+          COMMITS=$(git log "$BEFORE".."$AFTER" --pretty=format:'- %s (%an)' 2>/dev/null \
+                    || git log -5 --pretty=format:'- %s (%an)')
+          git diff "$BEFORE" "$AFTER" 2>/dev/null > diff.txt || git show "$AFTER" > diff.txt
+          head -c 60000 diff.txt > diff_capped.txt   # cap size to keep token usage sane
+
+          # Build the Anthropic request safely (jq handles JSON escaping)
+          jq -n \
+            --arg model "claude-sonnet-4-6" \
+            --rawfile diff diff_capped.txt \
+            --arg commits "$COMMITS" \
+            '{
+              model: $model,
+              max_tokens: 400,
+              messages: [{
+                role: "user",
+                content: ("Write a short, friendly update for a team Discord channel describing what changed, for NON-TECHNICAL readers (e.g. editors). Do not mention code, files, functions, variables, or technical jargon. Describe what is new or different in plain, everyday language from a user/product point of view, in 1-3 short sentences or bullets.\n\nCommit messages:\n" + $commits + "\n\nDiff:\n" + $diff)
+              }]
+            }' > request.json
+
+          SUMMARY=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d @request.json | jq -r '.content[0].text // empty')
+
+          # Fallback to raw commit list if the API call returns nothing
+          if [ -z "$SUMMARY" ]; then SUMMARY="$COMMITS"; fi
+
+          # Post to Discord
+          jq -n \
+            --arg content "**New changes on \`main\`** — $REPO" \
+            --arg summary "$SUMMARY" \
+            --arg url "$COMPARE_URL" \
+            '{
+              content: $content,
+              embeds: [{
+                title: "Changes pushed to main",
+                description: $summary,
+                url: $url,
+                color: 5814783
+              }]
+            }' > discord.json
+
+          curl -s -H "Content-Type: application/json" -d @discord.json "$DISCORD_WEBHOOK"

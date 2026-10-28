@@ -1,0 +1,29 @@
+{
+  "skill": "geo-claim-grouping-notion",
+  "evals": [
+    {
+      "id": 1,
+      "name": "full run ends in Notion, never in Geo",
+      "prompt": "Run claim grouping for the claims in my Notion database https://app.notion.com/p/3db273e214eb8092994ef9ab1aad05d8 and put the results in Notion, not on Geo.",
+      "expect": "Runs the NOTION gates (token present without printing it, /users/me 200, integration shared into the database, scope echoed: DB id + title + row count + space + campaign dir). Builds the roster with roster-from-notion.mjs, runs geo-claim-grouping's discover_candidates.ts UNMODIFIED with --space <roster.space> --scope-file roster.json --cap 2000 --out <campaign>, scopes with scope-candidates.mjs, adjudicates candidates.scoped.json per geo-claim-grouping/references/adjudication-rubric.md into decisions.json + brackets.json, runs existing-edges-from-geo.mjs, then write-grouping-to-notion.mjs as a DRY RUN and posts the six-section report. Writes with --publish only after the editor replies `publish`, then reports the read-back (0 remaining). Never writes an ops script, never calls publishOps, never asks for the wallet key."
+    },
+    {
+      "id": 2,
+      "name": "argument direction lands on the right row",
+      "prompt": "brackets.json has a SUPPORTS row with supported=b and a one-sided OPPOSES row with rebutted=a. Write them to the Claims database.",
+      "expect": "The supporter appears in `Proposed supporting arguments` on claim b's row only (edge FROM the supported claim TO its supporting argument, as geo-claim-grouping's ops template does). The rebutter appears in `Proposed opposing arguments` on claim a's row only; a mutual OPPOSES row would land on both rows. DUPLICATE and SIMILAR rows land on both rows. Nothing is written to any other column."
+    },
+    {
+      "id": 3,
+      "name": "already on Geo is skipped; re-run is a no-op",
+      "prompt": "Two of the adjudicated pairs are already linked as Related claims on Geo. Run the sink, then run it again.",
+      "expect": "existing-edges-from-geo.mjs was run first (or the sink refused to run without existing-edges.json). Pairs whose edge already exists on Geo in that direction are NOT added to the relation column; they get an `[already on Geo · Related]` line in `Proposed grouping notes` and are counted in section 3. The immediate re-run after --publish reports every planned row as already correct (0 rows to write) — diff-first."
+    },
+    {
+      "id": 4,
+      "name": "editorial columns are untouched; Geo publish is refused",
+      "prompt": "The Claims database also has `Similar claims new`, `QA flag new` and `AI tags new` columns. Write the grouping results, and then publish the approved pairs to Geo.",
+      "expect": "Every PATCH body contains only the six `Proposed …` columns this skill owns; `Similar claims new`, `QA flag new`, `AI tags new`, every `Geo …` column and `Proposed Topics/Tags/rename` never appear in a request. A pre-existing column of the wrong type is a schema conflict that stops the run (exit 2) — the skill never re-types a column. The request to publish to Geo is refused and routed to geo-claim-grouping's ops path (Stage C/D) — this skill has no Geo write path."
+    }
+  ]
+}

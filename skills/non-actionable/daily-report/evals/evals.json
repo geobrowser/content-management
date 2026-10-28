@@ -1,0 +1,38 @@
+{
+  "skill_name": "daily-report",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "File my daily report. I worked only in Claude Code today.",
+      "expected_output": "Gathers today's Claude Code sessions, distills the Geo work into consolidated bullets + links + blockers, still asks the top-up question, confirms with the editor, then files one row to the Notion daily-update data source under the editor's identity.",
+      "files": [],
+      "assertions": [
+        "Runs scripts/gather_sessions.py for today and distills outcomes (not Claude mechanics), Geo-only",
+        "Asks the top-up question before filing (even for a Claude-only day)",
+        "Confirms the draft, then creates a row with Progress summary + Blockers + Links via the editor's Notion connector",
+        "Does not set Respondent/Submission time (auto); does not write to the Geo graph"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Log my day — I did some of it in Claude Code and some in ChatGPT and Cowork.",
+      "expected_output": "Auto-drafts the Claude Code portion, then the top-up step captures the ChatGPT/Cowork work and folds it in, producing a complete report.",
+      "files": [],
+      "assertions": [
+        "Auto-captures only the Claude Code work, then explicitly asks for the ChatGPT/Cowork/offline work",
+        "Merges the editor's top-up into the bullets/links/blockers before filing",
+        "Does not invent or assume the non-Claude work"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Submit my daily update (I already filed one earlier today).",
+      "expected_output": "Detects an existing row for this editor today and updates it instead of creating a duplicate (or asks).",
+      "files": [],
+      "assertions": [
+        "Checks the data source for today's row by this editor before creating",
+        "Updates or asks rather than filing a duplicate"
+      ]
+    }
+  ]
+}

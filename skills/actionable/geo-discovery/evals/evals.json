@@ -1,0 +1,26 @@
+{
+  "skill_name": "geo-discovery",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run a discovery pass on the AI space and surface this week's content gaps.",
+      "expected_output": "Harvests the space's recent content, diagnoses coverage/depth/freshness/structural/trending gaps, prioritizes them, and drafts Gap finding entities (dry-run / proposal, not auto-published).",
+      "files": [],
+      "assertions": [
+        "Produces gaps at both entity and theme altitude",
+        "Ranks/prioritizes the gaps rather than dumping a flat list",
+        "Drafts Gap finding entities without auto-publishing them"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What trending topics in AI are missing from the AI space right now?",
+      "expected_output": "Identifies trending-but-missing themes by comparing the external stream against what's published on Geo.",
+      "files": [],
+      "assertions": [
+        "Compares external/trending signal against current Geo coverage",
+        "Returns gaps that are trending but not yet covered, with a short justification each"
+      ]
+    }
+  ]
+}

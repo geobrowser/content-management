@@ -1,0 +1,26 @@
+{
+  "skill_name": "ontology-advisor",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Should I create a new type for 'DeFi protocol', or use an existing type?",
+      "expected_output": "Advice grounded in ONTOLOGY.md + the live graph: prefer a broad existing type unless a narrow one adds real properties; suggests the existing type or justifies a new one. Read-only — drafts advice, never writes.",
+      "files": [],
+      "assertions": [
+        "Checks the live graph for an existing comparable type before recommending a new one",
+        "Applies broad-over-narrow (only create a narrow type if it adds >= 2 meaningful properties)",
+        "Gives advice only — does not create or modify anything on the graph"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "For a Person entity, should 'author' be a relation or a property?",
+      "expected_output": "Recommends a relation, because the value is a real-world thing (another entity), per the relations-over-free-text principle.",
+      "files": [],
+      "assertions": [
+        "Recommends modeling 'author' as a relation, not a text property",
+        "Justifies it with the relations-over-free-text rule (the value is a real-world entity)"
+      ]
+    }
+  ]
+}

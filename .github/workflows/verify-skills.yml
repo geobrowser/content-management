@@ -1,0 +1,28 @@
+name: Verify skill integrity
+
+# Fails the build if any shipped skill changed without being re-approved
+# (bump version + changelog + `python3 skill-dev/skill_versions.py generate`),
+# or if MD-FILES.md no longer matches the repo's Markdown files.
+#
+# This is a REQUIRED status check on main, so it runs on every pull request with
+# no path filter: a required check that is skipped never reports, and the pull
+# request would wait on it forever.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the script reads git log/ls-files — needs full history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify skills match their approved versions
+        run: python3 skill-dev/skill_versions.py verify
+      - name: Verify MD-FILES.md matches the repo
+        run: python3 skill-dev/check_md_manifest.py

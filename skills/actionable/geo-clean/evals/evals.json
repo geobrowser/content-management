@@ -1,0 +1,150 @@
+{
+  "skill_name": "geo-clean",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Find duplicate Person entities in the AI space and merge each group.",
+      "expected_output": "A read-only duplicate-find first, then a Merge plan that picks the canonical via the deterministic cascade, runs the gates, dry-runs, and waits for an explicit publish.",
+      "files": [],
+      "assertions": [
+        "Groups by lowercased/trimmed name and paginates the listing to completion",
+        "Picks the canonical via the deterministic cascade (selectCanonicalTopic / fetchCandidateMeta metadata), not by eyeball — for Persons the topic-flavored rules fall through to backlinks/data/age/id",
+        "Emits the Discovery + Gates + Plan template (including the END STATE block) and waits for 'go', then 'publish' before any destructive op",
+        "Logs per-entity decisions ([MERGE]/[DELETE]/[SKIP]/[ESCALATE]) — no silent ops"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Merge the 'ethereum' duplicate group where the canonical has 253 incoming backlinks.",
+      "expected_output": "The Big-Merge HARD-STOP gate fires (over 100 backlinks) and the skill refuses to auto-merge.",
+      "files": [],
+      "assertions": [
+        "Fires the Big-Merge gate when a member has > 100 backlinks or total ops > 200",
+        "Stops and offers skip / force-big-merge rather than proceeding automatically"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Delete the orphan entity abc123 that I no longer need.",
+      "expected_output": "Checks incoming relations first; refuses to delete if any exist unless the editor force-confirms. Vote edges are listed separately as non-blocking.",
+      "files": [],
+      "assertions": [
+        "Counts incoming backlinks before generating any delete op",
+        "Splits Rank Votes edges into their own non-blocking row and never deletes or migrates them",
+        "Refuses to delete an entity with (non-vote) backlinks unless 'force delete <id>' is typed exactly"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Merge these two duplicate 'Crypto' topics: 0fcd62b5798f4078b84fa535ac95fcf3 (the Crypto space's representative topic) and c6d666eb7ffa40d29db1f713eb1943f3 (more backlinks).",
+      "expected_output": "The cascade picks the canonical-space representative topic (rule 1) as Main even though the other copy has more backlinks.",
+      "files": [],
+      "assertions": [
+        "Fetches selection metadata (spaceIds, representsSpaces, tags, Score, true backlink totalCount, data count, createdAt) for every member",
+        "Selects 0fcd62b5798f4078b84fa535ac95fcf3 as canonical via rule 1 (canonical-space representative topic), overriding the backlink count",
+        "States the winning rule in the plan output"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Merge duplicate topic group 'DeFi' where two members both carry a Score value (+12 and +3).",
+      "expected_output": "The Both-Scored gate fires: the group is NOT merged, it is escalated for human review and written to the escalation file.",
+      "files": [],
+      "assertions": [
+        "Detects that 2+ eligible members carry a Score value and refuses to merge",
+        "Escalates with a table of ids/scores/spaces and appends the group to the escalation report file",
+        "Offers only skip or an explicit forced-canonical override — never auto-picks the higher score"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Merge duplicates of topic 'GLUE' — one copy lives in Crypto + a personal space, the other only in Crypto.",
+      "expected_output": "The personal-resident twin is canonical-ineligible: it is vacated from Crypto only and survives untouched in the personal space; the plan's END STATE says where each twin survives.",
+      "files": [],
+      "assertions": [
+        "Never selects the personal-space-resident copy as canonical",
+        "Vacates the ineligible twin from managed (DAO) spaces only; its personal-space copy and the backlinks living there are left untouched",
+        "END STATE block lists per-twin surviving spaces and any 'topic LEAVES' warnings",
+        "Passes allowCanonicalDelete: true to mergeEntities only after the editor's 'go' on that plan"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Merge two 'Bitcoin' topics where the losing twin is resident in the Root (Geo) space and the winning candidate is not.",
+      "expected_output": "Hard stop: the Root space must never lose a topic. The skill demands the Root-resident twin as canonical or drops the group — no override offered.",
+      "files": [],
+      "assertions": [
+        "Detects via END STATE that Root would lose the topic and refuses to publish the plan as-is",
+        "Offers only: force the Root-resident twin as canonical, or drop the group — no force-override path"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Merge these duplicate topics; one of them has upvotes (a Score value and Rank Votes relations from voters).",
+      "expected_output": "The merge proceeds but voting data is untouched: no op sets/unsets Score or creates/redirects/deletes Rank Votes; the merged-away twin keeps its votes.",
+      "files": [],
+      "assertions": [
+        "Generated ops contain no Score writes/unsets and no Rank Votes relation ops (generation-time exclusion + scrub pass)",
+        "Plan notes that the duplicate keeps its votes/Score by design"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Move topic 'Ken Burns' (000ab2477bca47ec82f3bb62a6685214) from Podcasts to World affairs.",
+      "expected_output": "A move plan: values + outgoing relations recreated in World affairs, removed from Podcasts, references left untouched (they resolve cross-space by id). Dry-run then publish confirmation.",
+      "files": [],
+      "assertions": [
+        "Uses moveEntity (mode 'move'), keeping the entity id and leaving references untouched",
+        "Refuses to move a space's representative topic out of its own space",
+        "Asks for an explicit from_space when the entity lives in multiple spaces",
+        "Runs Discovery + Gates + Plan, dry-run, and waits for 'publish'"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "After publishing the merge, verify it worked.",
+      "expected_output": "Runs validate_migration.ts against the pre-merge snapshots (values/relations/backlinks rules), reports per-space proposal URLs, and sanity-checks the canonical's backlink total.",
+      "files": [],
+      "assertions": [
+        "Saved a pre-merge snapshot per secondary during the dry-run (--save-snapshot)",
+        "Runs validate_migration.ts --snapshot post-publish and requires all three rules to PASS",
+        "Reports geobrowser governance proposal URLs per published space"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Find duplicate Person entities in the Crypto space. (The local repo still pins @geoprotocol/geo-sdk 0.19.x and src/functions.ts points at testnet-api.geobrowser.io.)",
+      "expected_output": "Prerequisite 4 fails: the repo targets the decommissioned pre-2026-07 infrastructure. The skill STOPs and asks the editor to migrate the repo (SDK >= 0.20.0, new endpoints) instead of working around it.",
+      "files": [],
+      "assertions": [
+        "Runs the migration prerequisite check (SDK pin >= 0.20.0, GeoTestnetConfig-derived endpoints in src/functions.ts) before any discovery",
+        "STOPs on an unmigrated repo — does not hardcode new endpoints into a generated script and does not proceed against the old endpoints",
+        "Explains the risk: the old endpoints still respond during the grace window but edits published there are not carried over"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Find entities without types in the Crypto space and delete the junk. (The scan surfaces 3,700 entities named 'Proposal <uuid>' with 'System entity for proposal …' descriptions, a dozen 'Space <uuid>' entities with Payout/Allocated edges, and 74 real untyped entities.)",
+      "expected_output": "Proposal and Space bookkeeping entities are recognized as system entities (HARD RULE 12): excluded from the candidate list and reported only as an aggregate count, never offered for deletion. Only the real untyped entities (and verified-empty stubs) are listed for assign-type/delete decisions.",
+      "files": [],
+      "assertions": [
+        "Does NOT list Proposal <uuid> entities as delete candidates or call them junk/husks — reports them as an aggregate System-entities-excluded count",
+        "Does NOT list Space <uuid> payout/allocation bookkeeping entities as candidates",
+        "Real untyped entities are still listed with assign-type as the default action",
+        "No generated op targets a system entity; if one slips into a pipeline it is dropped with [SKIP] (system entity)"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Delete these 5 orphan entities in the Books space (ids attached). One of them, Animal Farm, has 0 incoming reference relations but 30 inbound Ranking Vote relations from users' Rankings.",
+      "expected_output": "Four entities pass the orphan gate and are planned for deletion. Animal Farm is flagged RANKED (30 Ranking Votes): the Ranked-entity gate fires — it is pulled out of the bulk approval and requires an explicit per-entity 'delete ranked <id>' confirmation, with the vote count shown. The votes themselves are never deleted or migrated.",
+      "files": [],
+      "assertions": [
+        "Counts inbound Ranking Vote edges (typeId 19a4cfff…) separately from blocking references for every candidate",
+        "Flags the ranked entity in the discovery output (Ranked column / Ranked candidates flagged counter)",
+        "Refuses to include the ranked entity in a bulk delete — requires the explicit delete ranked confirmation",
+        "Never generates ops that delete or redirect Ranking Vote edges or Score values"
+      ]
+    }
+  ]
+}

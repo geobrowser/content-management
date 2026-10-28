@@ -1,0 +1,35 @@
+{
+  "skill": "geo-mirror-and-group",
+  "evals": [
+    {
+      "id": 1,
+      "name": "full pipeline stops at the dry-run and never touches Geo",
+      "prompt": "Mirror the claims in the Relationships space into my Notion page and run claim grouping on them.",
+      "expect": "Runs run-pipeline.mjs stage by stage: probe, then mirror (a scope is required — refuses an unscoped mirror), then prepare, then adjudicates EVERY exported pair against ../../actionable/geo-claim-grouping/references/adjudication-rubric.md into decisions.json + brackets.json, then finish. Ends at the sink's dry-run and hands the editor the exact --publish command. Never passes --publish itself, never runs geo-mirror Part 2 (diff-notion-vs-geo / sync-to-geo), never writes to Geo. Reports which database was created, how many rows changed, and what section 6 of the dry-run said."
+    },
+    {
+      "id": 2,
+      "name": "semantic recall is decided from the corpus, not from a default",
+      "prompt": "Set up a grouping review for this debate space in Notion.",
+      "expect": "Runs stage probe first and reports the space's entity count and signal coverage. Because the space holds no News stories, reports it as DEBATE-DRIVEN and turns semantic recall ON, explaining that with no stories the (shared story AND shared topic) branch of the structural gate is unsatisfiable for every pair, leaving text overlap as the only live admission path — the one gate a same-meaning-different-wording pair fails by construction. Budgets the extra time (~6-8.5 s per scope claim) before starting rather than after."
+    },
+    {
+      "id": 3,
+      "name": "a small roster in a large space forces semantic recall on",
+      "prompt": "Mirror 30 claims out of the AI space and group them.",
+      "expect": "Notes that probe reads AI as news-driven, but overrides semantic recall ON anyway because the roster is a tiny fraction of the space: structural admission needs both sides of a pair inside the mirror, so a small roster pairs almost entirely outward. Does not silently accept a run that returns zero both-in-roster pairs — recognises that as the symptom and says so."
+    },
+    {
+      "id": 4,
+      "name": "a large space is scoped, never swept",
+      "prompt": "Mirror the AI space claims into Notion.",
+      "expect": "Refuses to mirror ~22,000 claims. Reports the count from probe, explains that --since / --related / --limit are all applied AFTER the whole type has been paged so none of them avoids the full read, and that --limit N returns an arbitrary N when the type has no date property. Asks for a curated tab or id list and uses --ids-file, or stops and says what it needs."
+    },
+    {
+      "id": 5,
+      "name": "the adjudication batch is never silently sampled",
+      "prompt": "Run the grouping half — the mirror already exists.",
+      "expect": "Skips to stage prepare with the existing --db. Counts both-in-roster pairs and sizes --top to that count rather than accepting the default 80. If a capped scope reaches the sink anyway, surfaces it from section 6 of the dry-run instead of reporting the pass as complete."
+    }
+  ]
+}
